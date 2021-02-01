@@ -1,4 +1,4 @@
-package com.reactnativevpn2sock
+package com.htmake.vpn2sock
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

@@ -3,7 +3,6 @@ import * as React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import Vpn2sock from 'react-native-vpn2sock';
 
-
 export default function App() {
   const [result, setResult] = React.useState<number | undefined>();
 

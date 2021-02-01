@@ -1,4 +1,4 @@
-package com.reactnativevpn2sock
+package com.htmake.vpn2sock
 
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -15,10 +15,10 @@ class Vpn2sockModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     // See https://reactnative.dev/docs/native-modules-android
     @ReactMethod
     fun multiply(a: Int, b: Int, promise: Promise) {
-    
+
       promise.resolve(a * b)
-    
+
     }
 
-    
+
 }

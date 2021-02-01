@@ -10,7 +10,7 @@ import com.facebook.react.ReactInstanceManager;
 import com.facebook.soloader.SoLoader;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
-import com.reactnativevpn2sock.Vpn2sockPackage;
+import com.htmake.vpn2sock.Vpn2sockPackage;
 
 public class MainApplication extends Application implements ReactApplication {
 

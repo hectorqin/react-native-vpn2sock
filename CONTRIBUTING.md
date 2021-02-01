@@ -51,7 +51,7 @@ yarn test
 
 To edit the Objective-C files, open `example/ios/Vpn2sockExample.xcworkspace` in XCode and find the source files at `Pods > Development Pods > react-native-vpn2sock`.
 
-To edit the Kotlin files, open `example/android` in Android studio and find the source files at `reactnativevpn2sock` under `Android`.
+To edit the Kotlin files, open `example/android` in Android studio and find the source files at `htmake/vpn2sock` under `Android`.
 
 ### Commit message convention
 
