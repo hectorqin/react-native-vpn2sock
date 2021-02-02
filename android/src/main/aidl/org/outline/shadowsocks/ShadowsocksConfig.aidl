@@ -17,6 +17,7 @@ package org.outline.shadowsocks;
 parcelable ShadowsocksConfig {
   String host;
   int port;
+  int type;
   String password;
   String method;
 }

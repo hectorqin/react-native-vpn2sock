@@ -42,7 +42,7 @@ import org.json.JSONObject;
 import org.outline.IVpnTunnelService;
 import org.outline.OutlinePlugin;
 import org.outline.TunnelConfig;
-import org.outline.log.SentryErrorReporter;
+// import org.outline.log.SentryErrorReporter;
 import org.outline.shadowsocks.Shadowsocks;
 import org.outline.shadowsocks.ShadowsocksConfig;
 import org.outline.shadowsocks.ShadowsocksConnectivity;
@@ -493,7 +493,7 @@ public class VpnTunnelService extends VpnService {
 
   private void initErrorReporting(final String apiKey) {
     try {
-      SentryErrorReporter.init(getApplicationContext(), apiKey);
+      // SentryErrorReporter.init(getApplicationContext(), apiKey);
     } catch (Exception e) {
       LOG.log(Level.SEVERE, "Failed to initialize Sentry", e);
     }
