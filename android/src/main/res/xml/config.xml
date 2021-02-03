@@ -1,0 +1,4 @@
+<feature name="OutlinePlugin">
+  <param name="android-package" value="org.outline.OutlinePlugin" />
+  <param name="onload" value="true" />
+</feature>

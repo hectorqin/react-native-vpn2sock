@@ -168,10 +168,12 @@ public class VpnTunnelService extends VpnService {
     final TunnelConfig tunnelConfig = new TunnelConfig();
     tunnelConfig.id = tunnelId;
     tunnelConfig.proxy = new ShadowsocksConfig();
+    tunnelConfig.proxy.type = config.getInt("type");
     tunnelConfig.proxy.host = config.getString("host");
     tunnelConfig.proxy.port = config.getInt("port");
-    tunnelConfig.proxy.password = config.getString("password");
-    tunnelConfig.proxy.method = config.getString("method");
+    tunnelConfig.proxy.username = config.optString("username");
+    tunnelConfig.proxy.password = config.optString("password");
+    tunnelConfig.proxy.method = config.optString("method");
     try {
       // `name` is an optional property; don't throw if it fails to parse.
       tunnelConfig.name = config.getString("name");

@@ -18,6 +18,7 @@ parcelable ShadowsocksConfig {
   String host;
   int port;
   int type;
+  String username;
   String password;
   String method;
 }
