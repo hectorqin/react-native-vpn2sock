@@ -80,6 +80,20 @@ public class VpnTunnelService extends VpnService {
     }
 
     @Override
+    public String getActivedTunnelId() {
+      if (VpnTunnelService.this.tunnelConfig != null) {
+        return VpnTunnelService.this.tunnelConfig.id;
+      } else {
+        return "";
+      }
+    }
+
+    @Override
+    public int getTunnelStatus() {
+      return VpnTunnelService.this.tunnelStore.getTunnelStatus().value;
+    }
+
+    @Override
     public boolean isTunnelActive(String tunnelId) {
       return VpnTunnelService.this.isTunnelActive(tunnelId);
     }
@@ -137,7 +151,6 @@ public class VpnTunnelService extends VpnService {
   @Override
   public void onRevoke() {
     LOG.info("VPN revoked.");
-    broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.DISCONNECTED);
     tearDownActiveTunnel();
   }
 
@@ -199,19 +212,28 @@ public class VpnTunnelService extends VpnService {
     if (isRestart) {
       // Broadcast the previous instance disconnect event before reassigning the tunnel ID.
       broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.DISCONNECTED);
+      tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.DISCONNECTED);
       stopForeground();
     }
     tunnelConfig = config;
+    broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.CONNECTING);
+    tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.CONNECTING);
+    String socketAddress = "";
 
     OutlinePlugin.ErrorCode errorCode = OutlinePlugin.ErrorCode.NO_ERROR;
     try {
-      // Do not perform connectivity checks when connecting on startup. We should avoid failing
-      // the tunnel due to a network error, as network may not be ready.
-      errorCode = startShadowsocks(config.proxy, !isAutoStart).get();
-      if (!(errorCode == OutlinePlugin.ErrorCode.NO_ERROR
-              || errorCode == OutlinePlugin.ErrorCode.UDP_RELAY_NOT_ENABLED)) {
-        tearDownActiveTunnel();
-        return errorCode;
+      if (config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value) {
+        socketAddress = String.format(Locale.ROOT, "%s:%s", config.proxy.host, config.proxy.port);
+      } else {
+        // Do not perform connectivity checks when connecting on startup. We should avoid failing
+        // the tunnel due to a network error, as network may not be ready.
+        errorCode = startShadowsocks(config.proxy, !isAutoStart).get();
+        if (!(errorCode == OutlinePlugin.ErrorCode.NO_ERROR
+          || errorCode == OutlinePlugin.ErrorCode.UDP_RELAY_NOT_ENABLED)) {
+          tearDownActiveTunnel();
+          return errorCode;
+        }
+        socketAddress = shadowsocks.getLocalServerAddress();
       }
     } catch (Exception e) {
       tearDownActiveTunnel();
@@ -230,10 +252,10 @@ public class VpnTunnelService extends VpnService {
       startNetworkConnectivityMonitor();
     }
 
-    final boolean remoteUdpForwardingEnabled =
-        isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR;
+    final boolean remoteUdpForwardingEnabled = config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value ? false :
+      (isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR);
     try {
-      vpnTunnel.connectTunnel(shadowsocks.getLocalServerAddress(), remoteUdpForwardingEnabled);
+      vpnTunnel.connectTunnel(socketAddress, remoteUdpForwardingEnabled);
     } catch (Exception e) {
       LOG.log(Level.SEVERE, "Failed to connect the tunnel", e);
       tearDownActiveTunnel();
@@ -261,11 +283,15 @@ public class VpnTunnelService extends VpnService {
 
   /* Helper method to tear down an active tunnel. */
   private void tearDownActiveTunnel() {
+    // 停止 tunnel
     stopVpnTunnel();
-    stopForeground();
-    tunnelConfig = null;
-    stopNetworkConnectivityMonitor();
+    // 发送广播
+    broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.DISCONNECTED);
+    // 保存状态
     tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.DISCONNECTED);
+    tunnelConfig = null;
+    stopForeground();
+    stopNetworkConnectivityMonitor();
   }
 
   /* Helper method that stops Shadowsocks, tun2socks, and tears down the VPN. */
@@ -370,6 +396,7 @@ public class VpnTunnelService extends VpnService {
         return;
       }
       broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.CONNECTED);
+      tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.CONNECTED);
       startForegroundWithNotification(tunnelConfig, OutlinePlugin.TunnelStatus.CONNECTED);
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -380,6 +407,11 @@ public class VpnTunnelService extends VpnService {
         // available if WiFi is the active network. Additionally, `getActiveNetwork` and
         // `getActiveNetworkInfo` have been observed to return the underlying network set by us.
         setUnderlyingNetworks(new Network[] {network});
+      }
+
+      if (tunnelConfig.proxy.type == OutlinePlugin.SocketType.SOCKS5.value) {
+        // socket5 默认不支持 UDP
+        return;
       }
 
       final boolean wasUdpSupported = tunnelStore.isUdpSupported();
@@ -403,6 +435,7 @@ public class VpnTunnelService extends VpnService {
         return;
       }
       broadcastVpnConnectivityChange(OutlinePlugin.TunnelStatus.RECONNECTING);
+      tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.RECONNECTING);
       startForegroundWithNotification(tunnelConfig, OutlinePlugin.TunnelStatus.RECONNECTING);
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -442,7 +475,7 @@ public class VpnTunnelService extends VpnService {
     Intent statusChange = new Intent(OutlinePlugin.Action.ON_STATUS_CHANGE.value);
     statusChange.addCategory(getPackageName());
     statusChange.putExtra(OutlinePlugin.MessageData.PAYLOAD.value, status.value);
-    statusChange.putExtra(OutlinePlugin.MessageData.TUNNEL_ID.value, tunnelConfig.id);
+    statusChange.putExtra(OutlinePlugin.MessageData.TUNNEL_ID.value, tunnelConfig != null ? tunnelConfig.id : "");
     sendBroadcast(statusChange);
   }
 
@@ -478,8 +511,10 @@ public class VpnTunnelService extends VpnService {
     JSONObject tunnel = new JSONObject();
     try {
       JSONObject proxyConfig = new JSONObject();
+      proxyConfig.put("type", config.proxy.type);
       proxyConfig.put("host", config.proxy.host);
       proxyConfig.put("port", config.proxy.port);
+      proxyConfig.put("username", config.proxy.username);
       proxyConfig.put("password", config.proxy.password);
       proxyConfig.put("method", config.proxy.method);
       tunnel.put(TUNNEL_ID_KEY, config.id).put(TUNNEL_CONFIG_KEY, proxyConfig);

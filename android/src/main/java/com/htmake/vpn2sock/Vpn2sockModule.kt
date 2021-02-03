@@ -48,15 +48,11 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
     class VpnTunnelBroadcastReceiver(private val rContext: ReactApplicationContext) : BroadcastReceiver() {
       override fun onReceive(context: Context, intent: Intent) {
         val tunnelId = intent.getStringExtra(MessageData.TUNNEL_ID.value)
-        if (tunnelId == null) {
-          OutlinePlugin.LOG.warning("Tunnel status broadcast missing tunnel ID")
-          return
-        }
         val status = intent.getIntExtra(MessageData.PAYLOAD.value, TunnelStatus.INVALID.value)
-        OutlinePlugin.LOG.fine(String.format(Locale.ROOT, "VPN connectivity changed: %s, %d", tunnelId, status))
+        OutlinePlugin.LOG.fine(String.format(Locale.ROOT, "VPN connectivity changed: %s, %d", tunnelId ?: "UNKNOW", status))
 
         val params = Arguments.createMap()
-        params.putString("tunnelId", tunnelId)
+        params.putString("tunnelId", tunnelId ?: "")
         params.putInt("status", status)
         rContext.getJSModule(RCTDeviceEventEmitter::class.java)
           .emit("onVPNStatusChange", params)
@@ -82,7 +78,7 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
         // Rebind the service so the VPN automatically reconnects if the service process crashed.
         val context: Context = reactContext.getApplicationContext()
         val rebind = Intent(context, VpnTunnelService::class.java)
-        rebind.putExtra(VpnServiceStarter.AUTOSTART_EXTRA, true)
+        rebind.putExtra(VpnServiceStarter.AUTOSTART_EXTRA, false)
         // Send the error reporting API key so the potential crash is reported.
         context.bindService(rebind, this, Context.BIND_AUTO_CREATE)
       }
@@ -92,33 +88,33 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
     init {
       this.vpnPlugin = OutlinePlugin()
       this.reactContext.addActivityEventListener(mActivityEventListener)
+      val context: Context = reactContext.getApplicationContext()
+      val broadcastFilter = IntentFilter()
+      broadcastFilter.addAction(OutlinePlugin.Action.ON_STATUS_CHANGE.value)
+      broadcastFilter.addCategory(context.packageName)
+      context.registerReceiver(vpnTunnelBroadcastReceiver, broadcastFilter)
+
+      context.bindService(Intent(context, VpnTunnelService::class.java), vpnServiceConnection,
+        Context.BIND_AUTO_CREATE)
     }
 
     override fun getName(): String {
         return "Vpn2sock"
     }
 
-    // Example method
-    // See https://reactnative.dev/docs/native-modules-android
-    @ReactMethod
-    fun multiply(a: Int, b: Int, promise: Promise) {
-
-      promise.resolve(a * b)
-
-    }
-
     @ReactMethod
     fun startTunnel(tunnelId: String, config: ReadableMap, promise: Promise) {
       try {
+        mStartVpnRequest = StartVpnRequest(tunnelId, config, promise)
         if (!this.prepareVpnService()) {
           // 等待VPN添加
-          this.mStartVpnRequest = StartVpnRequest(tunnelId, config, promise)
           return
         }
       } catch (e: ActivityNotFoundException) {
         promise.reject(e)
         return
       }
+      mStartVpnRequest = null
 
       if (vpnTunnelService == null) {
         promise.reject(OutlinePlugin.ErrorCode.UNEXPECTED.toString(), "VPNService not connected")
@@ -139,7 +135,7 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
       }
 
       val errorCode: Int = vpnTunnelService!!.startTunnel(tunnelConfig)
-      if (errorCode != OutlinePlugin.ErrorCode.NO_ERROR.value) {
+      if (errorCode == OutlinePlugin.ErrorCode.NO_ERROR.value) {
         promise.resolve(true)
         return
       }
@@ -153,11 +149,31 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
         return
       }
       val errorCode: Int = vpnTunnelService!!.stopTunnel(tunnelId)
-      if (errorCode != OutlinePlugin.ErrorCode.NO_ERROR.value) {
+      if (errorCode == OutlinePlugin.ErrorCode.NO_ERROR.value || errorCode == OutlinePlugin.ErrorCode.UNEXPECTED.value) {
         promise.resolve(true)
         return
       }
       promise.reject(errorCode.toString(), "Stop failed")
+    }
+
+    @ReactMethod
+    fun getActivedTunnelId(promise: Promise) {
+      if (vpnTunnelService == null) {
+        promise.reject(OutlinePlugin.ErrorCode.UNEXPECTED.toString(), "VPNService not connected")
+        return
+      }
+      val tunnelId: String = vpnTunnelService!!.getActivedTunnelId()
+      promise.resolve(tunnelId)
+    }
+
+    @ReactMethod
+    fun getTunnelStatus(promise: Promise) {
+      if (vpnTunnelService == null) {
+        promise.reject(OutlinePlugin.ErrorCode.UNEXPECTED.toString(), "VPNService not connected")
+        return
+      }
+      val status: Int = vpnTunnelService!!.getTunnelStatus()
+      promise.resolve(status)
     }
 
     @ReactMethod

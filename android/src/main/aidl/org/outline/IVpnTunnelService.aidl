@@ -45,6 +45,17 @@ interface IVpnTunnelService {
    */
   int stopTunnel(String tunnelId);
 
+
+  /**
+  * Get current actived tunnelId
+  */
+  String getActivedTunnelId();
+
+  /**
+  * Get current tunnel status
+  */
+  int getTunnelStatus();
+
   /**
    * Determines whether a tunnel has been started.
    *

@@ -104,12 +104,23 @@ public class OutlinePlugin {
 
   public enum TunnelStatus {
     INVALID(-1), // Internal use only.
-    CONNECTED(0),
-    DISCONNECTED(1),
-    RECONNECTING(2);
+    DISCONNECTED(0),
+    CONNECTING(1),
+    CONNECTED(2),
+    RECONNECTING(3);
 
     public final int value;
     TunnelStatus(int value) {
+      this.value = value;
+    }
+  }
+
+  public enum SocketType {
+    SHADOWSOCKS(0),
+    SOCKS5(1);
+
+    public final int value;
+    SocketType(int value) {
       this.value = value;
     }
   }
@@ -177,14 +188,14 @@ public class OutlinePlugin {
 //  @Override
 //  protected void pluginInitialize() {
 //    // OutlineLogger.registerLogHandler(SentryErrorReporter.BREADCRUMB_LOG_HANDLER);
-//    Context context = getBaseContext();
-//    IntentFilter broadcastFilter = new IntentFilter();
-//    broadcastFilter.addAction(Action.ON_STATUS_CHANGE.value);
-//    broadcastFilter.addCategory(context.getPackageName());
-//    context.registerReceiver(vpnTunnelBroadcastReceiver, broadcastFilter);
+//   Context context = getBaseContext();
+//   IntentFilter broadcastFilter = new IntentFilter();
+//   broadcastFilter.addAction(Action.ON_STATUS_CHANGE.value);
+//   broadcastFilter.addCategory(context.getPackageName());
+//   context.registerReceiver(vpnTunnelBroadcastReceiver, broadcastFilter);
 //
-//    context.bindService(new Intent(context, VpnTunnelService.class), vpnServiceConnection,
-//        Context.BIND_AUTO_CREATE);
+//   context.bindService(new Intent(context, VpnTunnelService.class), vpnServiceConnection,
+//       Context.BIND_AUTO_CREATE);
 //  }
 //
 //  @Override
