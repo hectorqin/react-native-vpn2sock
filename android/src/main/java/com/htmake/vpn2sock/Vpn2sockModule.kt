@@ -28,7 +28,7 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
     private val REQUEST_CODE_PREPARE_VPN = 100
 
     private val mActivityEventListener: ActivityEventListener = object : BaseActivityEventListener() {
-      override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent) {
+      override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
         if (mStartVpnRequest != null && requestCode == REQUEST_CODE_PREPARE_VPN) {
           if (resultCode == Activity.RESULT_CANCELED) {
             mStartVpnRequest!!.promise.reject(OutlinePlugin.ErrorCode.VPN_PERMISSION_NOT_GRANTED.value.toString(), "VPN permission was not granted")
