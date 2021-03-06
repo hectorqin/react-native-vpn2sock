@@ -18,6 +18,10 @@ parcelable ShadowsocksConfig {
   String host;
   int port;
   int type;
+  boolean udpRelay;
+  String dnsServer;
+  int applicationMode;
+  List<String> applications;
   String username;
   String password;
   String method;

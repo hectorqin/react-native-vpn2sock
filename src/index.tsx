@@ -8,6 +8,16 @@ type SocketConfig = {
   username?: string;
   password?: string;
   method?: string;
+  udpRelay?: boolean; // 是否支持 udp relay
+  dnsServer?: string; // DNS server
+  applicationMode?: number; // VPN 模式，分为全局，白名单，黑名单
+  applications?: Array<string>; // 应用 packageName 列表，白名单或者黑名单
+};
+
+export const APPLICATION_MODE = {
+  GLOBAL_MODE: 0,
+  WHITELIST_MODE: 1,
+  BLACKLIST_MODE: 2,
 };
 
 export const ErrorCode = {

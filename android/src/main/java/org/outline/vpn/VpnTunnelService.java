@@ -30,6 +30,7 @@ import android.net.NetworkRequest;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.IBinder;
+import java.util.ArrayList;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -39,6 +40,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.outline.IVpnTunnelService;
 import org.outline.OutlinePlugin;
 import org.outline.TunnelConfig;
@@ -59,6 +61,10 @@ public class VpnTunnelService extends VpnService {
   private static final String NOTIFICATION_CHANNEL_ID = "outline-vpn";
   private static final String TUNNEL_ID_KEY = "id";
   private static final String TUNNEL_CONFIG_KEY = "config";
+  private static final int APPLICATION_GLOBAL_MODE = 0; // 默认全局模式
+  private static final int APPLICATION_WHITELIST_MODE = 1; // 白名单模式
+  private static final int APPLICATION_BLACKLIST_MODE = 2; // 黑名单模式
+
 
   private ThreadPoolExecutor executorService;
   private VpnTunnel vpnTunnel;
@@ -182,11 +188,29 @@ public class VpnTunnelService extends VpnService {
     tunnelConfig.id = tunnelId;
     tunnelConfig.proxy = new ShadowsocksConfig();
     tunnelConfig.proxy.type = config.getInt("type");
+    tunnelConfig.proxy.udpRelay = config.optBoolean("udpRelay");
+    tunnelConfig.proxy.applicationMode = config.optInt("applicationMode");
     tunnelConfig.proxy.host = config.getString("host");
     tunnelConfig.proxy.port = config.getInt("port");
     tunnelConfig.proxy.username = config.optString("username");
     tunnelConfig.proxy.password = config.optString("password");
     tunnelConfig.proxy.method = config.optString("method");
+    tunnelConfig.proxy.dnsServer = config.optString("dnsServer");
+    tunnelConfig.proxy.applications = new ArrayList<String>();
+    if (tunnelConfig.proxy.applicationMode > 0) {
+      JSONArray applications = config.optJSONArray("applications");
+      if (applications != null) {
+        for (int i = 0; i < applications.length(); i++) {
+            try {
+                tunnelConfig.proxy.applications.add(applications.getString(i));
+            } catch (JSONException e) {
+                LOG.info("Tunnel config applications field provided invalid data");
+                continue;
+            }
+        }
+      }
+    }
+
     try {
       // `name` is an optional property; don't throw if it fails to parse.
       tunnelConfig.name = config.getString("name");
@@ -244,7 +268,13 @@ public class VpnTunnelService extends VpnService {
       vpnTunnel.disconnectTunnel();
     } else {
       // Only establish the VPN if this is not a tunnel restart.
-      if (!vpnTunnel.establishVpn()) {
+      boolean isOk = false;
+      if (tunnelConfig.proxy.applicationMode == APPLICATION_GLOBAL_MODE) {
+        isOk = tunnelConfig.proxy.dnsServer != null && tunnelConfig.proxy.dnsServer.length() != 0 ? vpnTunnel.establishVpn(tunnelConfig.proxy.dnsServer) : vpnTunnel.establishVpn();
+      } else {
+        isOk = tunnelConfig.proxy.dnsServer != null && tunnelConfig.proxy.dnsServer.length() != 0 ? vpnTunnel.establishVpn(tunnelConfig.proxy.dnsServer, tunnelConfig.proxy.applicationMode == APPLICATION_WHITELIST_MODE, tunnelConfig.proxy.applications) : vpnTunnel.establishVpn(tunnelConfig.proxy.applicationMode == APPLICATION_WHITELIST_MODE, tunnelConfig.proxy.applications);
+      }
+      if (!isOk) {
         LOG.severe("Failed to establish the VPN");
         tearDownActiveTunnel();
         return OutlinePlugin.ErrorCode.VPN_START_FAILURE;
@@ -252,8 +282,8 @@ public class VpnTunnelService extends VpnService {
       startNetworkConnectivityMonitor();
     }
 
-    final boolean remoteUdpForwardingEnabled = config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value ? false :
-      (isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR);
+    final boolean remoteUdpForwardingEnabled = tunnelConfig.proxy.udpRelay ? true : (config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value ? false :
+      (isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR));
     try {
       vpnTunnel.connectTunnel(socketAddress, remoteUdpForwardingEnabled);
     } catch (Exception e) {

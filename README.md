@@ -13,6 +13,19 @@ npm install react-native-vpn2sock
 ```js
 import Vpn2sock from "react-native-vpn2sock";
 
+type SocketConfig = {
+  name?: string;
+  type: number;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  method?: string;
+  udpRelay?: boolean; // 是否支持 udp relay
+  dnsServer?: string; // DNS server
+  applicationMode?: number; // VPN 模式，分为全局，白名单，黑名单
+  applications?: Array<string>; // 应用 packageName 列表，白名单或者黑名单
+};
 // ...
 
 Vpn2sock.isRunning(TUNNEL_ID).then((r) => {

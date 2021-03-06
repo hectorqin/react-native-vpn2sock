@@ -21,6 +21,7 @@ import android.os.ParcelFileDescriptor;
 import android.net.VpnService;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -65,24 +66,55 @@ public class VpnTunnel {
     this.vpnService = vpnService;
   }
 
+  public synchronized boolean establishVpn() {
+    String dnsServer = selectDnsResolverAddress();
+    ArrayList<String> applicationPackageList = new ArrayList<>();
+    applicationPackageList.add(vpnService.getPackageName());
+    return this.establishVpn(dnsServer, false, applicationPackageList);
+  }
+
+  public synchronized boolean establishVpn(final String dnsServer) {
+    ArrayList<String> applicationPackageList = new ArrayList<>();
+    applicationPackageList.add(vpnService.getPackageName());
+    return this.establishVpn(dnsServer, false, applicationPackageList);
+  }
+
+  public synchronized boolean establishVpn(boolean isAllow, List<String> applicationPackageList) {
+    String dnsServer = selectDnsResolverAddress();
+    return this.establishVpn(dnsServer, isAllow, applicationPackageList);
+  }
+
   /**
    * Establishes a system-wide VPN that routes all device traffic to its TUN interface. Randomly
    * selects between OpenDNS and Dyn resolvers to set the VPN's DNS resolvers.
    *
    * @return boolean indicating whether the VPN was successfully established.
    */
-  public synchronized boolean establishVpn() {
+  public synchronized boolean establishVpn(final String dnsServer, boolean isAllow, List<String> applicationPackageList) {
     LOG.info("Establishing the VPN.");
     try {
-      dnsResolverAddress = selectDnsResolverAddress();
+      dnsResolverAddress = dnsServer;
       VpnService.Builder builder =
           vpnService.newBuilder()
               .setSession(vpnService.getApplicationName())
               .setMtu(VPN_INTERFACE_MTU)
               .addAddress(String.format(Locale.ROOT, VPN_INTERFACE_PRIVATE_LAN, "1"),
                   VPN_INTERFACE_PREFIX_LENGTH)
-              .addDnsServer(dnsResolverAddress)
-              .addDisallowedApplication(vpnService.getPackageName());
+              .addDnsServer(dnsResolverAddress);
+              // .addDisallowedApplication(vpnService.getPackageName());
+
+      final String currentPackageName = vpnService.getPackageName();
+      for(String packageName : applicationPackageList) {
+        if (isAllow && !packageName.equals(currentPackageName)) {
+          builder.addAllowedApplication(packageName);
+        } else {
+          builder.addDisallowedApplication(packageName);
+        }
+      }
+
+      if (!isAllow) {
+        builder.addDisallowedApplication(currentPackageName);
+      }
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         final Network activeNetwork =
