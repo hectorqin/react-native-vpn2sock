@@ -104,19 +104,26 @@ public class VpnTunnel {
               // .addDisallowedApplication(vpnService.getPackageName());
 
       final String currentPackageName = vpnService.getPackageName();
+      boolean isGlobal = true;
       for(String packageName : applicationPackageList) {
-        if (isAllow && !packageName.equals(currentPackageName)) {
-          builder.addAllowedApplication(packageName);
-        } else {
-          builder.addDisallowedApplication(packageName);
+        if (!packageName.equals(currentPackageName)) {
+          isGlobal = false;
+          if (isAllow) {
+            LOG.info(String.format(Locale.ROOT, "addAllowedApplication: %s", packageName));
+            builder.addAllowedApplication(packageName);
+          } else {
+            LOG.info(String.format(Locale.ROOT, "addDisallowedApplication: %s", packageName));
+            builder.addDisallowedApplication(packageName);
+          }
         }
       }
 
       if (!isAllow) {
+        LOG.info(String.format(Locale.ROOT, "addDisallowedApplication: %s", currentPackageName));
         builder.addDisallowedApplication(currentPackageName);
       }
 
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      if (isGlobal && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         final Network activeNetwork =
             vpnService.getSystemService(ConnectivityManager.class).getActiveNetwork();
         builder.setUnderlyingNetworks(new Network[] {activeNetwork});

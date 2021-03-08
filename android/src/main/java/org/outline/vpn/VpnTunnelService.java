@@ -61,9 +61,9 @@ public class VpnTunnelService extends VpnService {
   private static final String NOTIFICATION_CHANNEL_ID = "outline-vpn";
   private static final String TUNNEL_ID_KEY = "id";
   private static final String TUNNEL_CONFIG_KEY = "config";
-  private static final int APPLICATION_GLOBAL_MODE = 0; // 默认全局模式
-  private static final int APPLICATION_WHITELIST_MODE = 1; // 白名单模式
-  private static final int APPLICATION_BLACKLIST_MODE = 2; // 黑名单模式
+  private static final int VPN_GLOBAL_MODE = 0; // 默认全局模式
+  private static final int VPN_WHITELIST_MODE = 1; // 白名单模式
+  private static final int VPN_BLACKLIST_MODE = 2; // 黑名单模式
 
 
   private ThreadPoolExecutor executorService;
@@ -189,7 +189,7 @@ public class VpnTunnelService extends VpnService {
     tunnelConfig.proxy = new ShadowsocksConfig();
     tunnelConfig.proxy.type = config.getInt("type");
     tunnelConfig.proxy.udpRelay = config.optBoolean("udpRelay");
-    tunnelConfig.proxy.applicationMode = config.optInt("applicationMode");
+    tunnelConfig.proxy.vpnMode = config.optInt("vpnMode");
     tunnelConfig.proxy.host = config.getString("host");
     tunnelConfig.proxy.port = config.getInt("port");
     tunnelConfig.proxy.username = config.optString("username");
@@ -197,7 +197,7 @@ public class VpnTunnelService extends VpnService {
     tunnelConfig.proxy.method = config.optString("method");
     tunnelConfig.proxy.dnsServer = config.optString("dnsServer");
     tunnelConfig.proxy.applications = new ArrayList<String>();
-    if (tunnelConfig.proxy.applicationMode > 0) {
+    if (tunnelConfig.proxy.vpnMode != VPN_GLOBAL_MODE) {
       JSONArray applications = config.optJSONArray("applications");
       if (applications != null) {
         for (int i = 0; i < applications.length(); i++) {
@@ -269,10 +269,10 @@ public class VpnTunnelService extends VpnService {
     } else {
       // Only establish the VPN if this is not a tunnel restart.
       boolean isOk = false;
-      if (tunnelConfig.proxy.applicationMode == APPLICATION_GLOBAL_MODE) {
+      if (tunnelConfig.proxy.vpnMode == VPN_GLOBAL_MODE) {
         isOk = tunnelConfig.proxy.dnsServer != null && tunnelConfig.proxy.dnsServer.length() != 0 ? vpnTunnel.establishVpn(tunnelConfig.proxy.dnsServer) : vpnTunnel.establishVpn();
       } else {
-        isOk = tunnelConfig.proxy.dnsServer != null && tunnelConfig.proxy.dnsServer.length() != 0 ? vpnTunnel.establishVpn(tunnelConfig.proxy.dnsServer, tunnelConfig.proxy.applicationMode == APPLICATION_WHITELIST_MODE, tunnelConfig.proxy.applications) : vpnTunnel.establishVpn(tunnelConfig.proxy.applicationMode == APPLICATION_WHITELIST_MODE, tunnelConfig.proxy.applications);
+        isOk = tunnelConfig.proxy.dnsServer != null && tunnelConfig.proxy.dnsServer.length() != 0 ? vpnTunnel.establishVpn(tunnelConfig.proxy.dnsServer, tunnelConfig.proxy.vpnMode == VPN_WHITELIST_MODE, tunnelConfig.proxy.applications) : vpnTunnel.establishVpn(tunnelConfig.proxy.vpnMode == VPN_WHITELIST_MODE, tunnelConfig.proxy.applications);
       }
       if (!isOk) {
         LOG.severe("Failed to establish the VPN");

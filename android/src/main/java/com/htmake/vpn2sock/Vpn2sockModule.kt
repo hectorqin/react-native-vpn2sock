@@ -3,6 +3,8 @@ package com.htmake.vpn2sock
 import android.app.Activity
 import android.app.Activity.RESULT_OK
 import android.content.*
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.IBinder
 import com.facebook.react.bridge.*
@@ -49,7 +51,8 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
       override fun onReceive(context: Context, intent: Intent) {
         val tunnelId = intent.getStringExtra(MessageData.TUNNEL_ID.value)
         val status = intent.getIntExtra(MessageData.PAYLOAD.value, TunnelStatus.INVALID.value)
-        OutlinePlugin.LOG.fine(String.format(Locale.ROOT, "VPN connectivity changed: %s, %d", tunnelId ?: "UNKNOW", status))
+        OutlinePlugin.LOG.fine(String.format(Locale.ROOT, "VPN connectivity changed: %s, %d", tunnelId
+          ?: "UNKNOW", status))
 
         val params = Arguments.createMap()
         params.putString("tunnelId", tunnelId ?: "")
@@ -195,6 +198,27 @@ class Vpn2sockModule(private val reactContext: ReactApplicationContext) : ReactC
     fun isReachable(host: String, port: Int, promise: Promise) {
       val isReachable: Boolean = ShadowsocksConnectivity.isServerReachable(host, port)
       promise.resolve(isReachable)
+    }
+
+    @ReactMethod
+    fun getPackageList(promise: Promise) {
+      val packages = Arguments.createArray()
+      val packageManager: PackageManager = this.reactContext.getApplicationContext().getPackageManager()
+      try {
+        val packageInfos: List<PackageInfo> = packageManager.getInstalledPackages(PackageManager.GET_ACTIVITIES or
+          PackageManager.GET_SERVICES)
+        for (info in packageInfos) {
+          val packageInfo = Arguments.createMap()
+          packageInfo.putString("appName", info.applicationInfo.loadLabel(packageManager) as String)
+          packageInfo.putString("packageName", info.packageName)
+          packageInfo.putInt("versionCode", info.versionCode)
+          packageInfo.putString("versionName", info.versionName)
+          packages.pushMap(packageInfo)
+        }
+      } catch (t: Throwable) {
+        t.printStackTrace()
+      }
+      promise.resolve(packages)
     }
 
     @Throws(ActivityNotFoundException::class)

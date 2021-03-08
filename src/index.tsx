@@ -10,7 +10,7 @@ type SocketConfig = {
   method?: string;
   udpRelay?: boolean; // 是否支持 udp relay
   dnsServer?: string; // DNS server
-  applicationMode?: number; // VPN 模式，分为全局，白名单，黑名单
+  vpnMode?: number; // VPN 模式，分为全局，白名单，黑名单
   applications?: Array<string>; // 应用 packageName 列表，白名单或者黑名单
 };
 
@@ -56,6 +56,7 @@ type Vpn2sockType = {
   getTunnelStatus(): Promise<number>;
   isRunning(tunnelId: string): Promise<boolean>;
   isReachable(host: string, port: number): Promise<boolean>;
+  getPackageList(): Promise<Array<Object>>;
 };
 
 const { Vpn2sock } = NativeModules;
