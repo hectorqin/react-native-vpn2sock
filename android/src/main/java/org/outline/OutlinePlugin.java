@@ -117,7 +117,8 @@ public class OutlinePlugin {
 
   public enum SocketType {
     SHADOWSOCKS(0),
-    SOCKS5(1);
+    SOCKS5(1),
+    HTTP(2);
 
     public final int value;
     SocketType(int value) {

@@ -5,9 +5,9 @@ type SocketConfig = {
   type: number;
   host: string;
   port: number;
-  username?: string;
-  password?: string;
-  method?: string;
+  username?: string; // 暂时无效
+  password?: string; // 仅 SHADOWSOCKS 支持
+  method?: string; // 仅 SHADOWSOCKS 支持
   udpRelay?: boolean; // 是否支持 udp relay
   dnsServer?: string; // DNS server
   vpnMode?: number; // VPN 模式，分为全局，白名单，黑名单
@@ -46,7 +46,8 @@ export const TunnelStatus = {
 
 export const SocketType = {
   SHADOWSOCKS: 0,
-  SOCKS5: 1,
+  SOCKS5: 1, // 暂不支持鉴权
+  HTTP: 2, // 暂不支持鉴权
 };
 
 type Vpn2sockType = {

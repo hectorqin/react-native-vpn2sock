@@ -27,6 +27,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.Random;
 import org.outline.tun2socks.Tun2SocksJni;
+import com.htmake.tun2http.Tun2HttpJni;
 
 /**
  * Manages the life-cycle of the system VPN, and of the tunnel that processes its traffic.
@@ -39,6 +40,7 @@ public class VpnTunnel {
   private static final String VPN_INTERFACE_NETMASK = "255.255.255.0";
   private static final String VPN_IPV6_NULL = null;  // No IPv6 support.
   private static final int VPN_INTERFACE_MTU = 1500;
+  private static final int VPN_INTERFACE_HTTP_MTU = 10000;
   // OpenDNS, Cloudflare, and Quad9 DNS resolvers' IP addresses.
   private static final String[] DNS_RESOLVER_IP_ADDRESSES = {
       "208.67.222.222", "208.67.220.220", "1.1.1.1", "9.9.9.9"};
@@ -52,6 +54,10 @@ public class VpnTunnel {
   private String dnsResolverAddress;
   private ParcelFileDescriptor tunFd;
   private Thread tun2socksThread = null;
+  private int tunnelType = 0;
+  public static final int TUNNEL_TYPE_SOCKS = 0;
+  public static final int TUNNEL_TYPE_HTTP = 1;
+
 
   /**
    * Constructor.
@@ -64,6 +70,10 @@ public class VpnTunnel {
       throw new IllegalArgumentException("Must provide a VPN service instance");
     }
     this.vpnService = vpnService;
+  }
+
+  public synchronized void setTunnelType(int type) {
+    tunnelType = type;
   }
 
   public synchronized boolean establishVpn() {
@@ -97,7 +107,7 @@ public class VpnTunnel {
       VpnService.Builder builder =
           vpnService.newBuilder()
               .setSession(vpnService.getApplicationName())
-              .setMtu(VPN_INTERFACE_MTU)
+              .setMtu(tunnelType == TUNNEL_TYPE_SOCKS ? VPN_INTERFACE_MTU : VPN_INTERFACE_HTTP_MTU)
               .addAddress(String.format(Locale.ROOT, VPN_INTERFACE_PRIVATE_LAN, "1"),
                   VPN_INTERFACE_PREFIX_LENGTH)
               .addDnsServer(dnsResolverAddress);
@@ -158,6 +168,35 @@ public class VpnTunnel {
   }
 
   /**
+   * Connects a tunnel between a HTTPProxy server and the VPN TUN interface, by using the tun2http
+   * native library.
+   *
+   * @param proxyIp IP address of the HTTPProxy server.
+   * @param proxyPort port of the HTTPProxy server.
+   * @param remoteUdpForwardingEnabled whether the remote server supports UDP forwarding.
+   * @throws IllegalArgumentException if |socksServerAddress| is null.
+   * @throws IllegalStateException if the VPN has not been established, or the tunnel is already
+   *     connected.
+   */
+  public synchronized void connectTunnel(
+      final String proxyIp, int proxyPort, boolean remoteUdpForwardingEnabled) {
+    LOG.info("Connecting the tunnel.");
+    if (proxyIp == null) {
+      throw new IllegalArgumentException("Must provide an IP address to a HTTPProxy server.");
+    }
+    if (proxyPort <= 0) {
+      throw new IllegalArgumentException("HTTPProxy server port is invalid.");
+    }
+    if (tunFd == null) {
+      throw new IllegalStateException("Must establish the VPN before connecting the tunnel.");
+    }
+
+    LOG.fine("Starting tun2http thread");
+
+    Tun2HttpJni.start(tunFd.getFd(), remoteUdpForwardingEnabled, 3, proxyIp, proxyPort, vpnService);
+  }
+
+  /**
    * Connects a tunnel between a SOCKS server and the VPN TUN interface, by using the tun2socks
    * native library.
    *
@@ -201,6 +240,11 @@ public class VpnTunnel {
   /* Disconnects a tunnel created by a previous call to |connectTunnel|. */
   public synchronized void disconnectTunnel() {
     LOG.info("Disconnecting the tunnel.");
+    if (tunnelType == TUNNEL_TYPE_HTTP) {
+      // 断开 tun2http
+      Tun2HttpJni.stop();
+      return;
+    }
     if (tun2socksThread == null) {
       return;
     }

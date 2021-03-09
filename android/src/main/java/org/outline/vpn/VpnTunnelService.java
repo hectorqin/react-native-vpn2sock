@@ -248,7 +248,7 @@ public class VpnTunnelService extends VpnService {
     try {
       if (config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value) {
         socketAddress = String.format(Locale.ROOT, "%s:%s", config.proxy.host, config.proxy.port);
-      } else {
+      } else if (config.proxy.type == OutlinePlugin.SocketType.SHADOWSOCKS.value) {
         // Do not perform connectivity checks when connecting on startup. We should avoid failing
         // the tunnel due to a network error, as network may not be ready.
         errorCode = startShadowsocks(config.proxy, !isAutoStart).get();
@@ -263,6 +263,8 @@ public class VpnTunnelService extends VpnService {
       tearDownActiveTunnel();
       return OutlinePlugin.ErrorCode.SHADOWSOCKS_START_FAILURE;
     }
+
+    vpnTunnel.setTunnelType(config.proxy.type == OutlinePlugin.SocketType.HTTP.value ? VpnTunnel.TUNNEL_TYPE_HTTP : VpnTunnel.TUNNEL_TYPE_SOCKS);
 
     if (isRestart) {
       vpnTunnel.disconnectTunnel();
@@ -282,10 +284,14 @@ public class VpnTunnelService extends VpnService {
       startNetworkConnectivityMonitor();
     }
 
-    final boolean remoteUdpForwardingEnabled = tunnelConfig.proxy.udpRelay ? true : (config.proxy.type == OutlinePlugin.SocketType.SOCKS5.value ? false :
+    final boolean remoteUdpForwardingEnabled = tunnelConfig.proxy.udpRelay ? true : ((config.proxy.type != OutlinePlugin.SocketType.SHADOWSOCKS.value) ? false :
       (isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR));
     try {
-      vpnTunnel.connectTunnel(socketAddress, remoteUdpForwardingEnabled);
+      if (config.proxy.type == OutlinePlugin.SocketType.HTTP.value) {
+        vpnTunnel.connectTunnel(config.proxy.host, config.proxy.port, remoteUdpForwardingEnabled);
+      } else {
+        vpnTunnel.connectTunnel(socketAddress, remoteUdpForwardingEnabled);
+      }
     } catch (Exception e) {
       LOG.log(Level.SEVERE, "Failed to connect the tunnel", e);
       tearDownActiveTunnel();
@@ -429,7 +435,7 @@ public class VpnTunnelService extends VpnService {
       tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.CONNECTED);
       startForegroundWithNotification(tunnelConfig, OutlinePlugin.TunnelStatus.CONNECTED);
 
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      if (tunnelConfig.proxy.vpnMode == VPN_GLOBAL_MODE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         // Indicate that traffic will be sent over the current active network.
         // Although setting the underlying network to an available network may not seem like the
         // correct behavior, this method has been observed only to fire only when a preferred
@@ -439,8 +445,8 @@ public class VpnTunnelService extends VpnService {
         setUnderlyingNetworks(new Network[] {network});
       }
 
-      if (tunnelConfig.proxy.type == OutlinePlugin.SocketType.SOCKS5.value) {
-        // socket5 默认不支持 UDP
+      if (tunnelConfig.proxy.type != OutlinePlugin.SocketType.SHADOWSOCKS.value) {
+        // 非 SHADOWSOCKS 默认不支持 UDP
         return;
       }
 

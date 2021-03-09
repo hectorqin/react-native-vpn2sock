@@ -27,12 +27,12 @@ const SOCKET5_SERVER = {
   port: 1080,
 };
 
-let SOCKET_SERVER: any;
-
-// Use shadowsocks server
-SOCKET_SERVER = SHADOWSOCKS_SERVER;
-// Use socket5 server
-SOCKET_SERVER = SOCKET5_SERVER;
+const HTTP_SERVER = {
+  name: 'Local',
+  type: SocketType.HTTP,
+  host: '192.168.0.123',
+  port: 8118,
+};
 
 export default function App() {
   const [statusText, setStatusText] = React.useState<string>('');
@@ -67,39 +67,60 @@ export default function App() {
     };
   }, []);
 
+  function toggleVPN(config: any) {
+    setIsVpnStart((v) => {
+      Vpn2sock.isRunning(TUNNEL_ID).then((r) => {
+        console.log('isRunning  ', r);
+      });
+      if (v) {
+        // 关闭VPN
+        Vpn2sock.stopTunnel(TUNNEL_ID).then((r) => {
+          console.log('stopTunnel  ', r);
+        });
+      } else {
+        console.log('vpn2sock config: ', config);
+        // 开启VPN
+        Vpn2sock.isReachable(config.host, config.port).then((r) => {
+          console.log('isReachable  ', r);
+        });
+        Vpn2sock.startTunnel(TUNNEL_ID, config).then((r) => {
+          console.log('startTunnel  ', r);
+          Vpn2sock.getActivedTunnelId().then((i) => {
+            console.log('getActivedTunnelId  ', i);
+          });
+        });
+      }
+      return !v;
+    });
+  }
+
   return (
     <View style={styles.container}>
       <Text>VPNStatus: {statusText}</Text>
-      <Button
-        title={isVpnStart ? '关闭VPN' : '开启VPN'}
-        onPress={() => {
-          setIsVpnStart((v) => {
-            Vpn2sock.isRunning(TUNNEL_ID).then((r) => {
-              console.log('isRunning  ', r);
-            });
-            if (v) {
-              // 关闭VPN
-              Vpn2sock.stopTunnel(TUNNEL_ID).then((r) => {
-                console.log('stopTunnel  ', r);
-              });
-            } else {
-              // 开启VPN
-              Vpn2sock.isReachable(SOCKET_SERVER.host, SOCKET_SERVER.port).then(
-                (r) => {
-                  console.log('isReachable  ', r);
-                }
-              );
-              Vpn2sock.startTunnel(TUNNEL_ID, SOCKET_SERVER).then((r) => {
-                console.log('startTunnel  ', r);
-                Vpn2sock.getActivedTunnelId().then((i) => {
-                  console.log('getActivedTunnelId  ', i);
-                });
-              });
-            }
-            return !v;
-          });
-        }}
-      />
+      <View style={{ marginTop: 10 }}>
+        <Button
+          title={isVpnStart ? '关闭VPN' : '开启VPN2SHADOWSOCKS'}
+          onPress={() => {
+            toggleVPN(SHADOWSOCKS_SERVER);
+          }}
+        />
+      </View>
+      <View style={{ marginTop: 10 }}>
+        <Button
+          title={isVpnStart ? '关闭VPN' : '开启VPN2SOCKS'}
+          onPress={() => {
+            toggleVPN(SOCKET5_SERVER);
+          }}
+        />
+      </View>
+      <View style={{ marginTop: 10 }}>
+        <Button
+          title={isVpnStart ? '关闭VPN' : '开启VPN2HTTP'}
+          onPress={() => {
+            toggleVPN(HTTP_SERVER);
+          }}
+        />
+      </View>
     </View>
   );
 }

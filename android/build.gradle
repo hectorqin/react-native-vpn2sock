@@ -34,11 +34,27 @@ android {
     versionCode 1
     versionName "1.0"
 
+    externalNativeBuild {
+        cmake {
+            cppFlags "-std=c++11 -fvisibility=hidden "
+            // abiFilters 'armeabi-v7a'
+            arguments "-DCMAKE_VERBOSE_MAKEFILE=1 -DANDROID_FUNCTION_LEVEL_LINKING=ON"
+        }
+    }
+
+    ndk {
+      abiFilters = project(":app").android.defaultConfig.ndk.abiFilters
+    }
   }
 
   buildTypes {
     release {
       minifyEnabled false
+    }
+  }
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
     }
   }
   lintOptions {
