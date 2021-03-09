@@ -1,6 +1,6 @@
 {
   "name": "react-native-vpn2sock",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "vpn2socks package for react-native",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
@@ -16,6 +16,9 @@
     "react-native-vpn2sock.podspec",
     "!lib/typescript/example",
     "!android/build",
+    "!android/.idea",
+    "!android/.cxx",
+    "!android/.gradle",
     "!ios/build",
     "!**/__tests__",
     "!**/__fixtures__",
