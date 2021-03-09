@@ -97,7 +97,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <Text>VPNStatus: {statusText}</Text>
-      <View style={{ marginTop: 10 }}>
+      <View style={styles.button}>
         <Button
           title={isVpnStart ? '关闭VPN' : '开启VPN2SHADOWSOCKS'}
           onPress={() => {
@@ -105,7 +105,7 @@ export default function App() {
           }}
         />
       </View>
-      <View style={{ marginTop: 10 }}>
+      <View style={styles.button}>
         <Button
           title={isVpnStart ? '关闭VPN' : '开启VPN2SOCKS'}
           onPress={() => {
@@ -113,7 +113,7 @@ export default function App() {
           }}
         />
       </View>
-      <View style={{ marginTop: 10 }}>
+      <View style={styles.button}>
         <Button
           title={isVpnStart ? '关闭VPN' : '开启VPN2HTTP'}
           onPress={() => {
@@ -135,5 +135,8 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     marginVertical: 20,
+  },
+  button: {
+    marginTop: 10,
   },
 });
