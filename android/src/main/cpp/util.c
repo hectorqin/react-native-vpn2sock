@@ -1,6 +1,5 @@
-
-
 #include "tun2http.h"
+#include "log.h"
 
 extern int loglevel;
 
@@ -41,10 +40,6 @@ int sdk_int(JNIEnv *env) {
     jclass clsVersion = jniFindClass(env, "android/os/Build$VERSION");
     jfieldID fid = (*env)->GetStaticFieldID(env, clsVersion, "SDK_INT", "I");
     return (*env)->GetStaticIntField(env, clsVersion, fid);
-}
-
-void log_android(int prio, const char *fmt, ...) {
-
 }
 
 uint8_t char2nible(const char c) {
@@ -122,7 +117,7 @@ int32_t get_local_port(const int sock) {
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
     if (getsockname(sock, (struct sockaddr *) &sin, &len) < 0) {
-        log_android(ANDROID_LOG_ERROR, "getsockname error %d: %s", errno, strerror(errno));
+        LOGE("getsockname error %d: %s", errno, strerror(errno));
         return -1;
     }
     else
@@ -136,7 +131,7 @@ int is_event(int fd, short event) {
     p.revents = 0;
     int r = poll(&p, 1, 0);
     if (r < 0) {
-        log_android(ANDROID_LOG_ERROR, "poll readable error %d: %s", errno, strerror(errno));
+        LOGE("poll readable error %d: %s", errno, strerror(errno));
         return 0;
     }
     else if (r == 0)

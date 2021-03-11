@@ -169,6 +169,7 @@ struct tcp_session {
 
     char hostname[512];
     int connect_sent;
+    int is_https;
 };
 
 struct ng_session {

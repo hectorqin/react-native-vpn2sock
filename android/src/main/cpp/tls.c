@@ -1,9 +1,8 @@
-
-
 #include <stdio.h>
 #include <stdlib.h> /* malloc() */
 #include <string.h> /* strncpy() */
 #include <sys/socket.h>
+#include <log.h>
 
 #define TLS_HEADER_LEN 5
 #define TLS_HANDSHAKE_CONTENT_TYPE 0x16
@@ -69,8 +68,10 @@ static void parse_extensions(const char *data, size_t data_len, char *hostname)
              * so we break our state and move p to beinnging
              * of the extension here
              */
-            if (pos + 4 + len > data_len)
+            if (pos + 4 + len > data_len) {
+                LOGW("parse_extensions pos %d + 4 + len %d > data_len %d", pos, len, data_len);
                 return;
+            }
             parse_server_name_extension(data + pos + 4, len,
                                         hostname);
             return;
@@ -84,20 +85,25 @@ static void parse_extensions(const char *data, size_t data_len, char *hostname)
  * hello handshake, returning the first servername found (pointer to static
  * array)
  */
-void parse_tls_header(const char *data, size_t data_len, char *hostname)
+void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is_tls)
 {
     char tls_content_type;
     char tls_version_major;
     char tls_version_minor;
     size_t pos = TLS_HEADER_LEN;
     size_t len;
+    const int IS_TLS_TRUE = 1;
+
+    // LOGD("parse_tls_header data:  %s", data);
 
     /*
      * Check that our TCP payload is at least large enough for a
      * TLS header
      */
-    if (data_len < TLS_HEADER_LEN)
+    if (data_len < TLS_HEADER_LEN) {
+        LOGW("parse_tls_header data_len %d < TLS_HEADER_LEN %d", data_len, TLS_HEADER_LEN);
         return;
+    }
 
     /*
      * SSL 2.0 compatible Client Hello
@@ -107,17 +113,22 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname)
      * See RFC5246 Appendix E.2
      */
     if (data[0] & 0x80 && data[2] == 1) {
+        LOGW("parse_tls_header SSL 2.0");
         return;
     }
 
     tls_content_type = data[0];
     if (tls_content_type != TLS_HANDSHAKE_CONTENT_TYPE) {
+        LOGW("parse_tls_header Not handshake %d", tls_content_type);
         return;
     }
+
+    *is_tls = IS_TLS_TRUE;
 
     tls_version_major = data[1];
     tls_version_minor = data[2];
     if (tls_version_major < 3) {
+        LOGW("parse_tls_header tls_version_major %d < 3", tls_version_major);
         return;
     }
 
@@ -127,13 +138,19 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname)
     data_len = MIN(data_len, len);
 
     /* Check we received entire TLS record length */
-    if (data_len < len)
+    if (data_len < len) {
+        LOGW("parse_tls_header data_len %d < len %d", data_len, len);
         return;
+    }
 
     /* Handshake */
-    if (pos + 1 > data_len)
+    if (pos + 1 > data_len) {
+        LOGW("parse_tls_header pos %d + 1 > data_len %d", pos, data_len);
         return;
+    }
+
     if (data[pos] != TLS_HANDSHAKE_TYPE_CLIENT_HELLO) {
+        LOGW("parse_tls_header data[pos] %d != TLS_HANDSHAKE_TYPE_CLIENT_HELLO %d", data[pos], TLS_HANDSHAKE_TYPE_CLIENT_HELLO);
         return;
     }
 
@@ -148,36 +165,46 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname)
     pos += 38;
 
     /* Session ID */
-    if (pos + 1 > data_len)
+    if (pos + 1 > data_len) {
+        LOGW("parse_tls_header [Session ID] pos %d + 1 > data_len %d", pos, data_len);
         return;
+    }
     len = (unsigned char)data[pos];
     pos += 1 + len;
 
     /* Cipher Suites */
-    if (pos + 2 > data_len)
+    if (pos + 2 > data_len) {
+        LOGW("parse_tls_header [Cipher Suites] pos %d + 2 > data_len %d", pos, data_len);
         return;
+    }
     len = ((unsigned char)data[pos] << 8) + (unsigned char)data[pos + 1];
     pos += 2 + len;
 
     /* Compression Methods */
-    if (pos + 1 > data_len)
+    if (pos + 1 > data_len) {
+        LOGW("parse_tls_header [Compression Methods] pos %d + 1 > data_len %d", pos, data_len);
         return;
+    }
     len = (unsigned char)data[pos];
     pos += 1 + len;
 
-    if (pos == data_len && tls_version_major == 3 &&
-        tls_version_minor == 0) {
+    if (pos == data_len && tls_version_major == 3 && tls_version_minor == 0) {
+        LOGW("parse_tls_header pos %d == data_len %d and tls_version_major == 3 and tls_version_minor == 0", pos, data_len);
         return;
     }
 
     /* Extensions */
-    if (pos + 2 > data_len)
+    if (pos + 2 > data_len) {
+        LOGW("parse_tls_header [Extensions] pos %d + 2 > data_len %d", pos, data_len);
         return;
+    }
     len = ((unsigned char)data[pos] << 8) + (unsigned char)data[pos + 1];
     pos += 2;
 
-    if (pos + len > data_len)
+    if (pos + len > data_len) {
+        LOGW("parse_tls_header [Extensions] pos %d + len %d > data_len %d", pos, len, data_len);
         return;
+    }
 
     parse_extensions(data + pos, len, hostname);
 }

@@ -1,5 +1,5 @@
-
 #include "tun2http.h"
+#include "log.h"
 
 JavaVM *jvm = NULL;
 int pipefds[2];
@@ -14,27 +14,27 @@ extern struct ng_session *ng_session;
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
-  log_android(ANDROID_LOG_INFO, "JNI load");
+  LOGI("JNI load");
 
   JNIEnv *env;
   if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK)
   {
-    log_android(ANDROID_LOG_INFO, "JNI load GetEnv failed");
+    LOGI("JNI load GetEnv failed");
     return -1;
   }
 
   // Raise file number limit to maximum
   struct rlimit rlim;
   if (getrlimit(RLIMIT_NOFILE, &rlim))
-    log_android(ANDROID_LOG_WARN, "getrlimit error %d: %s", errno, strerror(errno));
+    LOGW("getrlimit error %d: %s", errno, strerror(errno));
   else
   {
     rlim_t soft = rlim.rlim_cur;
     rlim.rlim_cur = rlim.rlim_max;
     if (setrlimit(RLIMIT_NOFILE, &rlim))
-      log_android(ANDROID_LOG_WARN, "setrlimit error %d: %s", errno, strerror(errno));
+      LOGW("setrlimit error %d: %s", errno, strerror(errno));
     else
-      log_android(ANDROID_LOG_WARN, "raised file limit from %d to %d", soft, rlim.rlim_cur);
+      LOGW("raised file limit from %d to %d", soft, rlim.rlim_cur);
   }
 
   return JNI_VERSION_1_6;
@@ -42,11 +42,11 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
 
 void JNI_OnUnload(JavaVM *vm, void *reserved)
 {
-  log_android(ANDROID_LOG_INFO, "JNI unload");
+  LOGI("JNI unload");
 
   JNIEnv *env;
   if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK)
-    log_android(ANDROID_LOG_INFO, "JNI load GetEnv failed");
+    LOGI("JNI load GetEnv failed");
 }
 
 // JNI ServiceSinkhole
@@ -62,13 +62,13 @@ int initPipe(JNIEnv *env, jobject instance)
 
   if (pthread_mutex_init(&lock, NULL))
   {
-    log_android(ANDROID_LOG_ERROR, "pthread_mutex_init failed");
+    LOGE("pthread_mutex_init failed");
   }
 
   // Create signal pipe
   if (pipe(pipefds))
   {
-    log_android(ANDROID_LOG_ERROR, "Create pipe error %d: %s", errno, strerror(errno));
+    LOGE("Create pipe error %d: %s", errno, strerror(errno));
     return errno;
   }
   else
@@ -78,7 +78,7 @@ int initPipe(JNIEnv *env, jobject instance)
       int flags = fcntl(pipefds[i], F_GETFL, 0);
       if (flags < 0 || fcntl(pipefds[i], F_SETFL, flags | O_NONBLOCK) < 0)
       {
-        log_android(ANDROID_LOG_ERROR, "fcntl pipefds[%d] O_NONBLOCK error %d: %s",
+        LOGE("fcntl pipefds[%d] O_NONBLOCK error %d: %s",
                     i, errno, strerror(errno));
         return errno;
       }
@@ -91,14 +91,14 @@ void cleanPipe()
 {
   if (pthread_mutex_destroy(&lock))
   {
-    log_android(ANDROID_LOG_ERROR, "pthread_mutex_destroy failed");
+    LOGE("pthread_mutex_destroy failed");
   }
 
   for (int i = 0; i < 2; i++)
   {
     if (close(pipefds[i]))
     {
-      log_android(ANDROID_LOG_ERROR, "Close pipe error %d: %s", errno, strerror(errno));
+      LOGE("Close pipe error %d: %s", errno, strerror(errno));
     }
   }
 }
@@ -109,15 +109,15 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
 {
   if (thread_id && pthread_kill(thread_id, 0) == 0)
   {
-    log_android(ANDROID_LOG_INFO, "Already running thread %x", thread_id);
+    LOGI("Already running thread %x", thread_id);
     return 0;
   }
   else
   {
-    int res = initPipe(*env, vpnServiceInstance);
+    int res = initPipe(env, vpnServiceInstance);
     if (res != 0)
     {
-      log_android(ANDROID_LOG_ERROR, "initPipe error %d", res);
+      LOGE("initPipe error %d", res);
       return res;
     }
     max_tun_msg = 0;
@@ -126,7 +126,7 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
     int flags = fcntl(tun, F_GETFL, 0);
     if (flags < 0 || fcntl(tun, F_SETFL, flags & ~O_NONBLOCK) < 0)
     {
-      log_android(ANDROID_LOG_ERROR, "fcntl tun ~O_NONBLOCK error %d: %s",
+      LOGE("fcntl tun ~O_NONBLOCK error %d: %s",
                   errno, strerror(errno));
       return -1;
     }
@@ -135,7 +135,7 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
     jint rs = (*env)->GetJavaVM(env, &jvm);
     if (rs != JNI_OK)
     {
-      log_android(ANDROID_LOG_ERROR, "GetJavaVM failed");
+      LOGE("GetJavaVM failed");
     }
 
     // Get arguments
@@ -154,11 +154,11 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
     int err = pthread_create(&thread_id, NULL, handle_events, (void *)args);
     if (err == 0)
     {
-      log_android(ANDROID_LOG_INFO, "Started thread %x", thread_id);
+      LOGI("Started thread %x", thread_id);
     }
     else
     {
-      log_android(ANDROID_LOG_ERROR, "pthread_create error %d: %s", err, strerror(err));
+      LOGE("pthread_create error %d: %s", err, strerror(err));
     }
 
     return err;
@@ -170,35 +170,35 @@ Java_com_htmake_tun2http_Tun2HttpJni_stop(
     JNIEnv *env, jclass cls)
 {
   pthread_t t = thread_id;
-  log_android(ANDROID_LOG_INFO, "Stop tunnel thread %x", t);
+  LOGI("Stop tunnel thread %x", t);
   if (t && pthread_kill(t, 0) == 0)
   {
-    log_android(ANDROID_LOG_INFO, "Write pipe thread %x", t);
+    LOGI("Write pipe thread %x", t);
     if (write(pipefds[1], "x", 1) < 0)
     {
-      log_android(ANDROID_LOG_WARN, "Write pipe error %d: %s", errno, strerror(errno));
+      LOGW("Write pipe error %d: %s", errno, strerror(errno));
       return errno;
     }
     else
     {
-      log_android(ANDROID_LOG_INFO, "Join thread %x", t);
+      LOGI("Join thread %x", t);
       int err = pthread_join(t, NULL);
       if (err != 0)
       {
-        log_android(ANDROID_LOG_WARN, "pthread_join error %d: %s", err, strerror(err));
+        LOGW("pthread_join error %d: %s", err, strerror(err));
         return err;
       }
     }
 
     clear();
 
-    log_android(ANDROID_LOG_INFO, "Stopped thread %x", t);
+    LOGI("Stopped thread %x", t);
     cleanPipe();
     return 0;
   }
   else
   {
-    log_android(ANDROID_LOG_INFO, "Not running thread %x", t);
+    LOGI("Not running thread %x", t);
     return 0;
   }
 }
@@ -237,7 +237,7 @@ int protect_socket(const struct arguments *args, int socket)
 
   if (!isProtected)
   {
-    log_android(ANDROID_LOG_ERROR, "protect socket failed");
+    LOGE("protect socket failed");
     return -1;
   }
 
@@ -250,7 +250,7 @@ jobject jniGlobalRef(JNIEnv *env, jobject cls)
 {
   jobject gcls = (*env)->NewGlobalRef(env, cls);
   if (gcls == NULL)
-    log_android(ANDROID_LOG_ERROR, "Global ref failed (out of memory?)");
+    LOGE("Global ref failed (out of memory?)");
   return gcls;
 }
 
@@ -258,7 +258,7 @@ jclass jniFindClass(JNIEnv *env, const char *name)
 {
   jclass cls = (*env)->FindClass(env, name);
   if (cls == NULL)
-    log_android(ANDROID_LOG_ERROR, "Class %s not found", name);
+    LOGE("Class %s not found", name);
   else
     jniCheckException(env);
   return cls;
@@ -269,7 +269,7 @@ jmethodID jniGetMethodID(JNIEnv *env, jclass cls, const char *name, const char *
   jmethodID method = (*env)->GetMethodID(env, cls, name, signature);
   if (method == NULL)
   {
-    log_android(ANDROID_LOG_ERROR, "Method %s %s not found", name, signature);
+    LOGE("Method %s %s not found", name, signature);
     jniCheckException(env);
   }
   return method;

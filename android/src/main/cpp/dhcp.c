@@ -1,6 +1,5 @@
-
-
 #include "tun2http.h"
+#include "log.h"
 
 int check_dhcp(const struct arguments *args, const struct udp_session *u,
                const uint8_t *data, const size_t datalen) {
@@ -8,27 +7,27 @@ int check_dhcp(const struct arguments *args, const struct udp_session *u,
     // This is untested
     // Android routing of DHCP is erroneous
 
-    log_android(ANDROID_LOG_WARN, "DHCP check");
+    LOGI("DHCP check");
 
     if (datalen < sizeof(struct dhcp_packet)) {
-        log_android(ANDROID_LOG_WARN, "DHCP packet size %d", datalen);
+        LOGW("DHCP packet size %d", datalen);
         return -1;
     }
 
     const struct dhcp_packet *request = (struct dhcp_packet *) data;
 
     if (ntohl(request->option_format) != DHCP_OPTION_MAGIC_NUMBER) {
-        log_android(ANDROID_LOG_WARN, "DHCP invalid magic %x", request->option_format);
+        LOGW("DHCP invalid magic %x", request->option_format);
         return -1;
     }
 
     if (request->htype != 1 || request->hlen != 6) {
-        log_android(ANDROID_LOG_WARN, "DHCP unknown hardware htype %d hlen %d",
+        LOGW("DHCP unknown hardware htype %d hlen %d",
                     request->htype, request->hlen);
         return -1;
     }
 
-    log_android(ANDROID_LOG_WARN, "DHCP opcode", request->opcode);
+    LOGI("DHCP opcode %d", request->opcode);
 
     // Discover: source 0.0.0.0:68 destination 255.255.255.255:67
     // Offer: source 10.1.10.1:67 destination 255.255.255.255:68

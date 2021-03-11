@@ -5,6 +5,6 @@
 
 #include <stdint.h>
 
-void parse_tls_header(const char *data, size_t data_len, char *hostname);
+void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is_tls);
 
 #endif //TUN2HTTP_TLS_H
