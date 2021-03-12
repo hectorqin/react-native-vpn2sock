@@ -1,15 +1,10 @@
-
 #include <stdio.h>
 #include <stdlib.h> /* malloc() */
 #include <string.h> /* strncpy() */
 #include <strings.h> /* strncasecmp() */
 #include <ctype.h> /* isblank() */
 
-#include <android/log.h>
-
-#define LOG_TAG "Tun2Http_HTTP"
-#define LOG(v) {__android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, v);}
-
+#include "log.h"
 
 static const char http_503[] =
         "HTTP/1.1 503 Service Temporarily Unavailable\r\n"
@@ -34,8 +29,7 @@ static const char http_503[] =
 
 #include "tun2http.h"
 
-int
-get_header(const char *header, const char *data, size_t data_len, char *value) {
+int get_header(const char *header, const char *data, size_t data_len, char *value) {
     int len, header_len;
 
     header_len = strlen(header);
@@ -64,8 +58,7 @@ get_header(const char *header, const char *data, size_t data_len, char *value) {
     return -2;
 }
 
-int
-next_header(const char **data, size_t *len) {
+int next_header(const char **data, size_t *len) {
     int header_len;
 
     /* perhaps we can optimize this to reuse the value of header_len, rather
@@ -116,8 +109,8 @@ uint8_t *find_data(uint8_t *data, size_t data_len, char *value) {
 
 uint_t patch_buffer[2*MTU];
 
-uint8_t *patch_http_url(uint8_t *data, size_t *data_len) {
-    __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, "patch_http_url start");
+uint8_t *patch_http_url(uint8_t *data, size_t *data_len, char *proxyAuth) {
+    LOGD("patch_http_url start");
 
     char hostname[1024];
     uint8_t *host = find_data(data, *data_len, "Host: ");
@@ -130,42 +123,37 @@ uint8_t *patch_http_url(uint8_t *data, size_t *data_len) {
             length++;
         }
     } else {
-        LOG("patch_http_url no host");
+        LOGW("patch_http_url no host");
         return 0;
     }
 
-    __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, "patch_http_url find word");
-
     //GET POST PUT DELETE HEAD OPTIONS PATCH
-    char *word;
+    char *method;
     uint8_t *pos = 0;
     if ((pos = find_data(data, *data_len, "GET ")) > 0) {
-        word = "GET ";
+        method = "GET ";
     } else if ((pos = find_data(data, *data_len, "POST ")) > 0) {
-        word = "POST ";
+        method = "POST ";
     } else if ((pos = find_data(data, *data_len, "PUT ")) > 0) {
-        word = "PUT ";
+        method = "PUT ";
     } else if ((pos = find_data(data, *data_len, "DELETE ")) > 0) {
-        word = "DELETE ";
+        method = "DELETE ";
     } else if ((pos = find_data(data, *data_len, "HEAD ")) > 0) {
-        word = "HEAD ";
+        method = "HEAD ";
     } else if ((pos = find_data(data, *data_len, "OPTIONS ")) > 0) {
-        word = "OPTIONS ";
+        method = "OPTIONS ";
     } else if ((pos = find_data(data, *data_len, "PATCH ")) > 0) {
-        word = "PATCH ";
+        method = "PATCH ";
     }
 
     if (!pos) {
-        LOG("patch_http_url no word");
+        LOGW("patch_http_url no request method");
         return 0;
     }
 
-
     size_t http_len = strlen("http://");
-    size_t word_len = strlen(word);
-    size_t pos1 = pos - data + word_len;
-
-    LOG("patch_http_url word found");
+    size_t method_len = strlen(method);
+    size_t pos1 = pos - data + method_len;
 
     if (data[pos1] == 'h' &&
         data[pos1 + 1] == 't' &&
@@ -173,21 +161,46 @@ uint8_t *patch_http_url(uint8_t *data, size_t *data_len) {
         data[pos1 + 3] == 'p' &&
         data[pos1 + 4] == ':') {
 
-        LOG("patch_http_url already patched");
+        LOGD("patch_http_url already patched with host: %s method: %s", hostname, method);
         return 0;
     }
+    size_t patched_header_length = 0;
 
     uint8_t *new_data = &patch_buffer[0];
-    LOG("patch_http_url start patch");
-    memcpy(new_data, data, pos1);
+    memcpy(new_data, data, pos1);  // Method
 
-    memcpy(new_data + pos1, "http://", http_len);
-    memcpy(new_data + pos1 + http_len, hostname, length);
-    memcpy(new_data + pos1 + http_len + length, data + pos1, *data_len - pos1);
+    memcpy(new_data + pos1, "http://", http_len); // Method http://
+    memcpy(new_data + pos1 + http_len, hostname, length); // Method http://hostname
+    // 添加 代理鉴权
+    if (strlen(proxyAuth) > 0) {
+      // 找到 Host header结束位置
+      uint8_t *host_end_pos = find_data(host, strlen(host), "\n");
+      if (host_end_pos) {
+        host_end_pos = host_end_pos + 1; // '\n'
+        size_t host_line_end_len = host_end_pos - data - pos1; // end指针位置 - 指针起点位置 -
+        // 从 data + pos1 拷贝到 host_end_pos
+        memcpy(new_data + pos1 + http_len + length, data + pos1, host_line_end_len); // Method http://hostname...\nHost: ...\r\n
+        LOGD("Current header: %s", new_data);
+        char header[strlen(proxyAuth) + 29];
+        sprintf(header, "Proxy-Authorization: Basic %s\r\n", proxyAuth);
+        LOGD("Add header: %s", header);
+        // 加上 Proxy-Authorization header
+        patched_header_length = patched_header_length + strlen(header);
+        memcpy(new_data + pos1 + http_len + length + host_line_end_len, header, strlen(header));
+        LOGD("Current header: %s", new_data);
+        // 加上剩下的数据
+        memcpy(new_data + pos1 + http_len + length + host_line_end_len + strlen(header), host_end_pos, *data_len - pos1 - host_line_end_len);
+        LOGD("Current header: %s", new_data);
+      } else {
+        memcpy(new_data + pos1 + http_len + length, data + pos1, *data_len - pos1); // Method http://hostname...\nHost: ...\r\n\r\n
+      }
+    } else {
+        memcpy(new_data + pos1 + http_len + length, data + pos1, *data_len - pos1); // Method http://hostname...\nHost: ...\r\n\r\n
+    }
 
-    *data_len += http_len + length;
+    *data_len += http_len + length + patched_header_length;
 
-    LOG("patch_http_url end patch");
+    LOGD("patch_http_url patched with host: %s method: %s", hostname, method);
 
     return new_data;
 };

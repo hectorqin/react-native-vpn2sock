@@ -21,7 +21,9 @@ parcelable ShadowsocksConfig {
   boolean udpRelay;
   String dnsServer;
   int vpnMode;
+  boolean mergeDefaultRoute;
   List<String> applications;
+  List<String> routes;
   String username;
   String password;
   String method;

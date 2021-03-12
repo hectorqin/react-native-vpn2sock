@@ -96,6 +96,9 @@ public class VpnTunnelService extends VpnService {
 
     @Override
     public int getTunnelStatus() {
+      if (VpnTunnelService.this.tunnelConfig == null) {
+        VpnTunnelService.this.tunnelStore.setTunnelStatus(OutlinePlugin.TunnelStatus.DISCONNECTED);
+      }
       return VpnTunnelService.this.tunnelStore.getTunnelStatus().value;
     }
 
@@ -197,6 +200,8 @@ public class VpnTunnelService extends VpnService {
     tunnelConfig.proxy.method = config.optString("method");
     tunnelConfig.proxy.dnsServer = config.optString("dnsServer");
     tunnelConfig.proxy.applications = new ArrayList<String>();
+    tunnelConfig.proxy.mergeDefaultRoute = config.optBoolean("mergeDefaultRoute", true);
+    tunnelConfig.proxy.routes = new ArrayList<String>();
     if (tunnelConfig.proxy.vpnMode != VPN_GLOBAL_MODE) {
       JSONArray applications = config.optJSONArray("applications");
       if (applications != null) {
@@ -208,6 +213,17 @@ public class VpnTunnelService extends VpnService {
                 continue;
             }
         }
+      }
+    }
+    JSONArray routes = config.optJSONArray("routes");
+    if (routes != null) {
+      for (int i = 0; i < routes.length(); i++) {
+          try {
+              tunnelConfig.proxy.routes.add(routes.getString(i));
+          } catch (JSONException e) {
+              LOG.info("Tunnel config routes field provided invalid data");
+              continue;
+          }
       }
     }
 
@@ -265,6 +281,8 @@ public class VpnTunnelService extends VpnService {
     }
 
     vpnTunnel.setTunnelType(config.proxy.type == OutlinePlugin.SocketType.HTTP.value ? VpnTunnel.TUNNEL_TYPE_HTTP : VpnTunnel.TUNNEL_TYPE_SOCKS);
+    vpnTunnel.setMergeDefaultRoute(config.proxy.mergeDefaultRoute);
+    vpnTunnel.setTunnelRoutes(config.proxy.routes);
 
     if (isRestart) {
       vpnTunnel.disconnectTunnel();
@@ -288,7 +306,7 @@ public class VpnTunnelService extends VpnService {
       (isAutoStart ? tunnelStore.isUdpSupported() : errorCode == OutlinePlugin.ErrorCode.NO_ERROR));
     try {
       if (config.proxy.type == OutlinePlugin.SocketType.HTTP.value) {
-        vpnTunnel.connectTunnel(config.proxy.host, config.proxy.port, remoteUdpForwardingEnabled);
+        vpnTunnel.connectTunnel(config.proxy.host, config.proxy.port, remoteUdpForwardingEnabled, config.proxy.username, config.proxy.password);
       } else {
         vpnTunnel.connectTunnel(socketAddress, remoteUdpForwardingEnabled);
       }
@@ -636,6 +654,18 @@ public class VpnTunnelService extends VpnService {
       LOG.warning("Failed to find MainActivity class for package");
       throw e;
     }
+  }
+
+  /**
+    * 判断当前应用是否是debug状态
+    */
+  public boolean isApkInDebug() {
+      try {
+          ApplicationInfo info = getApplicationContext().getApplicationInfo();
+          return (info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+      } catch (Exception e) {
+          return false;
+      }
   }
 
   /* Retrieves the ID for a resource. This is equivalent to using the generated R class. */

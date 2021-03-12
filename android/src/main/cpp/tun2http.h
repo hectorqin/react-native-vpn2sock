@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>
+#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <errno.h>
@@ -26,8 +27,9 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/icmp6.h>
 
-#include <android/log.h>
 #include <sys/system_properties.h>
+
+#include "log.h"
 
 #define EPOLL_TIMEOUT 3600 // seconds
 #define EPOLL_EVENTS 20
@@ -58,6 +60,9 @@
 
 #define MTU 10000
 
+#define IS_HTTP 0
+#define IS_HTTPS 1
+
 struct arguments {
     JNIEnv *env;
     jobject instance;
@@ -65,6 +70,7 @@ struct arguments {
     jboolean fwd53;
     jint rcode;
     char proxyIp[128];
+    char proxyAuth[512];
     int proxyPort;
 };
 

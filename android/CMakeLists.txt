@@ -20,6 +20,7 @@ add_library( # Sets the name of the library.
           src/main/cpp/tls.c
           src/main/cpp/udp.c
           src/main/cpp/util.c
+          src/main/cpp/log.c
 )
 
 find_library( # Sets the name of the path variable.

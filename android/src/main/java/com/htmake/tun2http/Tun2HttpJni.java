@@ -38,7 +38,7 @@ public class Tun2HttpJni {
    * @param proxyIp HTTP proxy address
    * @param proxyPort HTTP proxy port
    */
-  public static native int start(int vpnInterfaceFileDescriptor, boolean transparentDNS, int rcode, String proxyIp, int proxyPort, VpnService serviceObj);
+  public static native int start(int vpnInterfaceFileDescriptor, boolean transparentDNS, int rcode, String proxyIp, int proxyPort, VpnService serviceObj, String proxyAuth, int logLevel);
 
   public static native int stop();
 

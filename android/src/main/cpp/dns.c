@@ -1,5 +1,4 @@
 #include "tun2http.h"
-#include "log.h"
 
 int32_t get_qname(const uint8_t *data, const size_t datalen, uint16_t off, char *qname) {
     *qname = 0;
@@ -45,7 +44,7 @@ int32_t get_qname(const uint8_t *data, const size_t datalen, uint16_t off, char 
 void parse_dns_response(const struct arguments *args, const struct udp_session *u,
                         const uint8_t *data, size_t *datalen) {
     if (*datalen < sizeof(struct dns_header) + 1) {
-        LOGW("DNS response length %d", *datalen);
+        LOGW("DNS response length %zu", *datalen);
         return;
     }
 
@@ -81,7 +80,7 @@ void parse_dns_response(const struct arguments *args, const struct udp_session *
                 off += 4;
             }
             else {
-                LOGW("DNS response Q invalid off %d datalen %d", off, *datalen);
+                LOGW("DNS response Q invalid off %d datalen %zu", off, *datalen);
                 return;
             }
         }
@@ -119,7 +118,7 @@ void parse_dns_response(const struct arguments *args, const struct udp_session *
                 }
             }
             else {
-                LOGW("DNS response A invalid off %d datalen %d", off, *datalen);
+                LOGW("DNS response A invalid off %d datalen %zu", off, *datalen);
                 return;
             }
         }
@@ -133,7 +132,7 @@ int get_dns_query(const struct arguments *args, const struct udp_session *u,
                   const uint8_t *data, const size_t datalen,
                   uint16_t *qtype, uint16_t *qclass, char *qname) {
     if (datalen < sizeof(struct dns_header) + 1) {
-        LOGW("DNS query length %d", datalen);
+        LOGW("DNS query length %zu", datalen);
         return -1;
     }
 
@@ -153,7 +152,7 @@ int get_dns_query(const struct arguments *args, const struct udp_session *u,
             return 0;
         }
         else
-            LOGW("DNS query invalid off %d datalen %d", off, datalen);
+            LOGW("DNS query invalid off %d datalen %zu", off, datalen);
     }
 
     return -1;

@@ -1,5 +1,4 @@
 #include "tun2http.h"
-#include "log.h"
 
 extern struct ng_session *ng_session;
 extern FILE *pcap_file;
@@ -29,7 +28,7 @@ int check_icmp_session(const struct arguments *args, struct ng_session *s,
             inet_ntop(AF_INET6, &s->icmp.saddr.ip6, source, sizeof(source));
             inet_ntop(AF_INET6, &s->icmp.daddr.ip6, dest, sizeof(dest));
         }
-        LOGI("ICMP idle %d/%d sec stop %d from %s to %s",
+        LOGI("ICMP idle %ld/%d sec stop %d from %s to %s",
                     now - s->icmp.time, timeout, s->icmp.stop, dest, source);
 
         if (close(s->socket))
@@ -95,9 +94,7 @@ void check_icmp_socket(const struct arguments *args, const struct epoll_event *e
                 // but for some unexplained reason this is not the case
                 // some bits seems to be set extra
                 struct icmp *icmp = (struct icmp *) buffer;
-                LOGD(
-                        s->icmp.id == icmp->icmp_id ? ANDROID_LOG_INFO : ANDROID_LOG_WARN,
-                        "ICMP recv bytes %d from %s for tun type %d code %d id %x/%x seq %d",
+                LOGD("ICMP recv bytes %d from %s for tun type %d code %d id %x/%x seq %d",
                         bytes, dest,
                         icmp->icmp_type, icmp->icmp_code,
                         s->icmp.id, icmp->icmp_id, icmp->icmp_seq);
@@ -345,7 +342,7 @@ ssize_t write_icmp(const struct arguments *args, const struct icmp_session *cur,
     free(buffer);
 
     if (res != len) {
-        LOGE("write %d/%d", res, len);
+        LOGE("write %zd/%zu", res, len);
         return -1;
     }
 

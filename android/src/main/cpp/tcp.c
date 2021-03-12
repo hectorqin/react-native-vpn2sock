@@ -1,7 +1,6 @@
 #include "tun2http.h"
 #include "tls.h"
 #include "http.h"
-#include "log.h"
 
 extern struct ng_session *ng_session;
 
@@ -97,7 +96,7 @@ int monitor_tcp_session(const struct arguments *args, struct ng_session *s, int 
 
         int rport = htons(s->tcp.dest);
         // Check for connected = writable
-        if (s->tcp.connect_sent == TCP_CONNECT_SENT && rport == 443)
+        if (s->tcp.connect_sent == TCP_CONNECT_SENT && (rport == 443 || s->tcp.is_https == IS_HTTPS))
             events = events | EPOLLIN;
         else
             events = events | EPOLLOUT;
@@ -311,8 +310,8 @@ void check_tcp_socket(const struct arguments *args,
                     size_t len = s->tcp.forward->len - s->tcp.forward->sent;
                     size_t newlen = len;
                     uint8_t *new_data = 0;
-                    if (htons(s->tcp.dest) == 80) {
-                        new_data = patch_http_url(data, &newlen);
+                    if (htons(s->tcp.dest) == 80 || s->tcp.is_https == IS_HTTP) {
+                        new_data = patch_http_url(data, &newlen, args->proxyAuth);
                         if (new_data) {
                             data = new_data;
                         }
@@ -434,7 +433,7 @@ void check_tcp_socket(const struct arguments *args,
 
                     } else {
                         // Socket read data
-                        LOGD("%s recv bytes %d", session, bytes);
+                        LOGD("%s recv bytes %zd", session, bytes);
                         s->tcp.received += bytes;
 
                         // Forward to tun
@@ -632,7 +631,9 @@ jboolean handle_tcp(const struct arguments *args,
             s->tcp.sent = 0;
             s->tcp.received = 0;
             s->tcp.connect_sent = TCP_CONNECT_NOT_SENT;
+            s->tcp.is_https = IS_HTTP;
             if (rport == 80) {
+                // 80 端口默认是 http
                 s->tcp.connect_sent = TCP_CONNECT_ESTABLISHED;
             }
 
@@ -716,58 +717,63 @@ jboolean handle_tcp(const struct arguments *args,
         }
     } else {
         // Session found
-        // 检查是否 tls 请求
-        char hostname[512] = "";
-        if (!cur->tcp.is_https) {
-          // 解析是否 tls 的 client Hello 包，如果是，则从SNI中获取域名信息
-          parse_tls_header((const char *) data, datalen, hostname, cur->tcp.is_https);
-          LOGI("parsed hostname: %s  is_https: %d", hostname, cur->tcp.is_https);
-        }
-        // https 发送 CONNECT 请求
-        if (cur->tcp.is_https) {
-            // 连接代理
-            if (cur->tcp.connect_sent == TCP_CONNECT_NOT_SENT) {
-                // 获取需要建立连接的 hostname
-                if (strlen(cur->tcp.hostname) == 0) {
-                    if (strlen(hostname) > 0) {
-                        strcpy(cur->tcp.hostname, hostname);
-                    } else {
-                        struct sockaddr_in addr4;
-                        addr4.sin_family = AF_INET;
-                        addr4.sin_addr.s_addr = (__be32) cur->tcp.daddr.ip4;
-                        addr4.sin_port = cur->tcp.dest;
-                        lookup_hostname(&addr4, hostname, 512, 1);
-                        if (strlen(hostname) > 0) {
-                            strcpy(cur->tcp.hostname, hostname);
-                        }
-                    }
-                }
-                if (cur->tcp.hostname) {
-                    uint8_t buffer[512];
-                    sprintf(buffer, "CONNECT %s:443 HTTP/1.0\r\n\r\n", cur->tcp.hostname);
+        if (datalen > 0) {  // 数据包不为空
+          // 连接代理
+          if (cur->tcp.connect_sent == TCP_CONNECT_NOT_SENT) {
+              char hostname[512] = "";
+              // 解析是否 tls 的 client Hello 包，如果是，则从SNI中获取域名信息
+              parse_tls_header((const char *) data, datalen, hostname);
+              LOGI("parsed tls hostname: %s ", hostname);
+              // 获取需要建立连接的 hostname
+              if (strlen(hostname) > 0) {
+                  strcpy(cur->tcp.hostname, hostname);
+                  // 解析成功，是 https
+                  uint8_t buffer[512];
+                  int rport = htons(cur->tcp.dest);
+                  if (args->proxyAuth) {
+                    sprintf(buffer, "CONNECT %s:%d HTTP/1.0\r\nProxy-Authorization: Basic %s\r\n\r\n", cur->tcp.hostname, rport, args->proxyAuth);
+                  } else {
+                    sprintf(buffer, "CONNECT %s:%d HTTP/1.0\r\n\r\n", cur->tcp.hostname, rport);
+                  }
 
-                    ssize_t sent = send(cur->socket, buffer, strlen(buffer), MSG_NOSIGNAL);
-                    if (sent < 0) {
-                        write_rst(args, &cur->tcp);
-                    } else {
-                        cur->tcp.connect_sent = TCP_CONNECT_SENT;
-                        cur->tcp.state = TCP_LISTEN;
-                    }
-                }
-            }
-            // 代理还没建立连接，则将收到的数据包加入队列
-            if (cur->tcp.connect_sent != TCP_CONNECT_ESTABLISHED) {
-                char session[250];
-                sprintf(session,
-                        "%s %s loc %u rem %u acked %u",
-                        packet,
-                        strstate(cur->tcp.state),
-                        cur->tcp.local_seq - cur->tcp.local_start,
-                        cur->tcp.remote_seq - cur->tcp.remote_start,
-                        cur->tcp.acked - cur->tcp.local_start);
-                queue_tcp(args, tcphdr, session, &cur->tcp, data, datalen);
-                goto free;
-            }
+                  LOGI("Send connect request: %s ", buffer);
+                  cur->tcp.is_https = IS_HTTPS;
+
+                  ssize_t sent = send(cur->socket, buffer, strlen(buffer), MSG_NOSIGNAL);
+                  if (sent < 0) {
+                      write_rst(args, &cur->tcp);
+                  } else {
+                      cur->tcp.connect_sent = TCP_CONNECT_SENT;
+                      cur->tcp.state = TCP_LISTEN;
+                  }
+              } else {
+                  struct sockaddr_in addr4;
+                  addr4.sin_family = AF_INET;
+                  addr4.sin_addr.s_addr = (__be32) cur->tcp.daddr.ip4;
+                  addr4.sin_port = cur->tcp.dest;
+                  lookup_hostname(&addr4, hostname, 512, 1);
+                  if (strlen(hostname) > 0) {
+                      strcpy(cur->tcp.hostname, hostname);
+                  }
+
+                  // 解析 tls 不成功，则默认为 http 请求
+                  cur->tcp.connect_sent = TCP_CONNECT_ESTABLISHED;
+              }
+          }
+        }
+
+        // 代理还没建立连接，则将收到的数据包加入队列
+        if (cur->tcp.connect_sent != TCP_CONNECT_ESTABLISHED) {
+            char session[250];
+            sprintf(session,
+                    "%s %s loc %u rem %u acked %u",
+                    packet,
+                    strstate(cur->tcp.state),
+                    cur->tcp.local_seq - cur->tcp.local_start,
+                    cur->tcp.remote_seq - cur->tcp.remote_start,
+                    cur->tcp.acked - cur->tcp.local_start);
+            queue_tcp(args, tcphdr, session, &cur->tcp, data, datalen);
+            goto free;
         }
 
         char session[250];
@@ -1210,7 +1216,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
               cur->version == 4 ? &cur->daddr.ip4 : &cur->daddr.ip6, dest, sizeof(dest));
 
     // Send packet
-    LOGD("TCP sending%s%s%s%s to tun %s/%u seq %u ack %u data %u",
+    LOGD("TCP sending%s%s%s%s to tun %s/%u seq %u ack %u data %lu",
                 (tcp->syn ? " SYN" : ""),
                 (tcp->ack ? " ACK" : ""),
                 (tcp->fin ? " FIN" : ""),
@@ -1225,7 +1231,7 @@ ssize_t write_tcp(const struct arguments *args, const struct tcp_session *cur,
     free(buffer);
 
     if (res != len) {
-        LOGE("TCP write %d/%d", res, len);
+        LOGE("TCP write %zd/%zu", res, len);
         return -1;
     }
 

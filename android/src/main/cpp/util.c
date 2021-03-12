@@ -1,7 +1,4 @@
 #include "tun2http.h"
-#include "log.h"
-
-extern int loglevel;
 
 uint16_t calc_checksum(uint16_t start, const uint8_t *buffer, size_t length) {
     register uint32_t sum = start;

@@ -1,45 +1,46 @@
-#include <android/log.h>
-
-#ifndef LOG_LEVEL
-
-#define LOG_LEVEL ANDROID_LOG_SILENT // 日志级别
-#if(LOG_LEVEL <= ANDROID_LOG_ERROR)
+// log level
+#ifndef LOG_LEVEL_NONE
+#define LOG_LEVEL_NONE 0
+#define LOG_LEVEL_ERROR 1
+#define LOG_LEVEL_WARN 2
+#define LOG_LEVEL_INFO 3
+#define LOG_LEVEL_DEBUG 4
 #define LOG_TAG "tun2http"
-#if(LOG_LEVEL <= ANDROID_LOG_VERBOSE)
-#define LOGV(...) __android_log_print(ANDROID_LOG_VERBOSE,LOG_TAG,__VA_ARGS__)
-#else
-#define LOGV(...) NULL
-#endif
 
-#if(LOG_LEVEL <= ANDROID_LOG_DEBUG)
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__)
-#else
-#define LOGD(...) NULL
-#endif
+extern int log_level;
 
-#if(LOG_LEVEL <= ANDROID_LOG_INFO)
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
-#else
-#define LOGI(...) NULL
-#endif
-
-#if(LOG_LEVEL <= ANDROID_LOG_WARN)
-#define LOGW(...) __android_log_print(ANDROID_LOG_WARN,LOG_TAG,__VA_ARGS__)
-#else
-#define LOGW(...) NULL
-#endif
-
-#if(LOG_LEVEL <= ANDROID_LOG_ERROR)
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
-#else
-#define LOGE(...) NULL
-#endif
-#else
-#define LOGV(...) NULL
-#define LOGD(...) NULL
-#define LOGI(...) NULL
-#define LOGW(...) NULL
-#define LOGE(...) NULL
-#endif
-
+#include <android/log.h>
+#define LOG(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGE(...)                                                 \
+    do                                                               \
+    {                                                                \
+        if (log_level >= LOG_LEVEL_ERROR)                            \
+        {                                                            \
+            __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__); \
+        }                                                            \
+    } while (0)
+#define LOGW(...)                                                 \
+    do                                                               \
+    {                                                                \
+        if (log_level >= LOG_LEVEL_WARN)                            \
+        {                                                            \
+            __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__); \
+        }                                                            \
+    } while (0)
+#define LOGI(...)                                                \
+    do                                                              \
+    {                                                               \
+        if (log_level >= LOG_LEVEL_INFO)                            \
+        {                                                           \
+            __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); \
+        }                                                           \
+    } while (0)
+#define LOGD(...)                                                 \
+    do                                                               \
+    {                                                                \
+        if (log_level >= LOG_LEVEL_DEBUG)                            \
+        {                                                            \
+            __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); \
+        }                                                            \
+    } while (0)
 #endif

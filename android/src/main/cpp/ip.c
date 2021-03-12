@@ -1,9 +1,7 @@
 #include "tun2http.h"
-#include "log.h"
 
 int max_tun_msg = 0;
-extern int loglevel;
-
+extern int log_level;
 
 uint16_t get_mtu() {
     return MTU;
@@ -100,7 +98,7 @@ void handle_ip(const struct arguments *args,
     uint8_t version = (*pkt) >> 4;
     if (version == 4) {
         if (length < sizeof(struct iphdr)) {
-            LOGW("IP4 packet too short length %d", length);
+            LOGW("IP4 packet too short length %zu", length);
             return;
         }
 
@@ -125,7 +123,7 @@ void handle_ip(const struct arguments *args,
             return;
         }
 
-        if (loglevel < ANDROID_LOG_WARN) {
+        if (log_level < LOG_LEVEL_WARN) {
             if (!calc_checksum(0, (uint8_t *) ip4hdr, sizeof(struct iphdr))) {
                 LOGE("Invalid IP checksum");
                 return;
@@ -133,7 +131,7 @@ void handle_ip(const struct arguments *args,
         }
     } else if (version == 6) {
         if (length < sizeof(struct ip6_hdr)) {
-            LOGW("IP6 packet too short length %d", length);
+            LOGW("IP6 packet too short length %zu", length);
             return;
         }
 

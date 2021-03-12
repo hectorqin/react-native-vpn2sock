@@ -2,7 +2,7 @@
 #include <stdlib.h> /* malloc() */
 #include <string.h> /* strncpy() */
 #include <sys/socket.h>
-#include <log.h>
+#include "log.h"
 
 #define TLS_HEADER_LEN 5
 #define TLS_HANDSHAKE_CONTENT_TYPE 0x16
@@ -85,14 +85,13 @@ static void parse_extensions(const char *data, size_t data_len, char *hostname)
  * hello handshake, returning the first servername found (pointer to static
  * array)
  */
-void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is_tls)
+void parse_tls_header(const char *data, size_t data_len, char *hostname)
 {
     char tls_content_type;
     char tls_version_major;
     char tls_version_minor;
     size_t pos = TLS_HEADER_LEN;
     size_t len;
-    const int IS_TLS_TRUE = 1;
 
     // LOGD("parse_tls_header data:  %s", data);
 
@@ -123,7 +122,6 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is
         return;
     }
 
-    *is_tls = IS_TLS_TRUE;
 
     tls_version_major = data[1];
     tls_version_minor = data[2];
@@ -137,9 +135,11 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is
           (unsigned char)data[4] + TLS_HEADER_LEN;
     data_len = MIN(data_len, len);
 
-    /* Check we received entire TLS record length */
-    if (data_len < len) {
-        LOGW("parse_tls_header data_len %d < len %d", data_len, len);
+    /* Check we received entire TLS record length and it's not too short to contain hostname*/
+    // parse hostname even if we do not get entire TLS record
+    // Because data may be too long for one package, and we just need the servername, don't need to parse the whole record
+    if (data_len < len && data_len < 512) {
+        LOGW("parse_tls_header data_len %d < len %d && data_len < 512", data_len, len);
         return;
     }
 
@@ -201,10 +201,13 @@ void parse_tls_header(const char *data, size_t data_len, char *hostname, int *is
     len = ((unsigned char)data[pos] << 8) + (unsigned char)data[pos + 1];
     pos += 2;
 
-    if (pos + len > data_len) {
-        LOGW("parse_tls_header [Extensions] pos %d + len %d > data_len %d", pos, len, data_len);
-        return;
-    }
+    // if (pos + len > data_len) {
+    //     LOGW("parse_tls_header [Extensions] pos %d + len %d > data_len %d", pos, len, data_len);
+    //     return;
+    // }
 
-    parse_extensions(data + pos, len, hostname);
+    // parse_extensions(data + pos, len, hostname);
+
+    // We only need the hostname, no need to check the whole record
+    parse_extensions(data + pos, MIN(data_len - pos, len), hostname);
 }

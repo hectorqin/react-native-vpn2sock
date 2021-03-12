@@ -1,14 +1,68 @@
 #include "tun2http.h"
-#include "log.h"
 
 JavaVM *jvm = NULL;
 int pipefds[2];
 pthread_t thread_id = 0;
 pthread_mutex_t lock;
-int loglevel = ANDROID_LOG_WARN;
-
 extern int max_tun_msg;
 extern struct ng_session *ng_session;
+extern int log_level;
+
+/**
+ *
+ * Base64 encode start
+ *
+ */
+#include <stddef.h>
+/* calculates number of bytes base64-encoded stream of N bytes will take. */
+#define BASE64ENC_BYTES(N) (((N + 2) / 3) * 4)
+void base64enc(char *dst, const void *src, size_t count);
+
+static const char base64_tbl[64] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/*
+   rofl0r's base64 impl (taken from libulz)
+   takes count bytes from src, writing base64 encoded string into dst.
+   dst needs to be at least BASE64ENC_BYTES(count) + 1 bytes in size.
+   the string in dst will be zero-terminated.
+   */
+void base64enc(char *dst, const void *src, size_t count)
+{
+    unsigned const char *s = src;
+    char *d = dst;
+    while (count)
+    {
+        int i = 0, n = *s << 16;
+        s++;
+        count--;
+        if (count)
+        {
+            n |= *s << 8;
+            s++;
+            count--;
+            i++;
+        }
+        if (count)
+        {
+            n |= *s;
+            s++;
+            count--;
+            i++;
+        }
+        *d++ = base64_tbl[(n >> 18) & 0x3f];
+        *d++ = base64_tbl[(n >> 12) & 0x3f];
+        *d++ = i ? base64_tbl[(n >> 6) & 0x3f] : '=';
+        *d++ = i == 2 ? base64_tbl[n & 0x3f] : '=';
+    }
+    *d = 0;
+}
+/**
+ *
+ * Base64 encode end
+ *
+ */
+
 
 // JNI
 
@@ -34,7 +88,7 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
     if (setrlimit(RLIMIT_NOFILE, &rlim))
       LOGW("setrlimit error %d: %s", errno, strerror(errno));
     else
-      LOGW("raised file limit from %d to %d", soft, rlim.rlim_cur);
+      LOGW("raised file limit from %lu to %lu", soft, rlim.rlim_cur);
   }
 
   return JNI_VERSION_1_6;
@@ -53,8 +107,6 @@ void JNI_OnUnload(JavaVM *vm, void *reserved)
 
 int initPipe(JNIEnv *env, jobject instance)
 {
-  loglevel = ANDROID_LOG_WARN;
-
   struct arguments args;
   args.env = env;
   args.instance = instance;
@@ -105,11 +157,11 @@ void cleanPipe()
 
 JNIEXPORT jint JNICALL
 Java_com_htmake_tun2http_Tun2HttpJni_start(
-    JNIEnv *env, jclass cls, jint tun, jboolean fwd53, jint rcode, jstring proxyIp, jint proxyPort, jobject vpnServiceInstance)
+    JNIEnv *env, jclass cls, jint tun, jboolean fwd53, jint rcode, jstring proxyIp, jint proxyPort, jobject vpnServiceInstance, jstring proxyAuth, jint logLevel)
 {
   if (thread_id && pthread_kill(thread_id, 0) == 0)
   {
-    LOGI("Already running thread %x", thread_id);
+    LOGI("Already running thread %lx", thread_id);
     return 0;
   }
   else
@@ -132,6 +184,7 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
     }
 
     const char *proxy_ip = (*env)->GetStringUTFChars(env, proxyIp, 0);
+    const char *proxy_auth = (*env)->GetStringUTFChars(env, proxyAuth, 0);
     jint rs = (*env)->GetJavaVM(env, &jvm);
     if (rs != JNI_OK)
     {
@@ -146,15 +199,24 @@ Java_com_htmake_tun2http_Tun2HttpJni_start(
     args->fwd53 = fwd53;
     args->rcode = rcode;
     strcpy(args->proxyIp, proxy_ip);
+    if (proxy_auth != NULL) {
+      base64enc(args->proxyAuth, proxy_auth, strlen(proxy_auth));
+      LOGI("Set proxyAuth %s", args->proxyAuth);
+    }
     args->proxyPort = proxyPort;
+    if (logLevel >= LOG_LEVEL_NONE && logLevel <= LOG_LEVEL_DEBUG) {
+      LOGI("Set log_level %d", logLevel);
+      log_level = logLevel;
+    }
 
     (*env)->ReleaseStringUTFChars(env, proxyIp, proxy_ip);
+    (*env)->ReleaseStringUTFChars(env, proxyAuth, proxy_auth);
 
     // Start native thread
     int err = pthread_create(&thread_id, NULL, handle_events, (void *)args);
     if (err == 0)
     {
-      LOGI("Started thread %x", thread_id);
+      LOGI("Started thread %lx", thread_id);
     }
     else
     {
@@ -170,10 +232,10 @@ Java_com_htmake_tun2http_Tun2HttpJni_stop(
     JNIEnv *env, jclass cls)
 {
   pthread_t t = thread_id;
-  LOGI("Stop tunnel thread %x", t);
+  LOGI("Stop tunnel thread %lx", t);
   if (t && pthread_kill(t, 0) == 0)
   {
-    LOGI("Write pipe thread %x", t);
+    LOGI("Write pipe thread %lx", t);
     if (write(pipefds[1], "x", 1) < 0)
     {
       LOGW("Write pipe error %d: %s", errno, strerror(errno));
@@ -181,7 +243,7 @@ Java_com_htmake_tun2http_Tun2HttpJni_stop(
     }
     else
     {
-      LOGI("Join thread %x", t);
+      LOGI("Join thread %lx", t);
       int err = pthread_join(t, NULL);
       if (err != 0)
       {
@@ -192,13 +254,13 @@ Java_com_htmake_tun2http_Tun2HttpJni_stop(
 
     clear();
 
-    LOGI("Stopped thread %x", t);
+    LOGI("Stopped thread %lx", t);
     cleanPipe();
     return 0;
   }
   else
   {
-    LOGI("Not running thread %x", t);
+    LOGI("Not running thread %lx", t);
     return 0;
   }
 }

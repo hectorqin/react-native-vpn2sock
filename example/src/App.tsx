@@ -31,7 +31,9 @@ const HTTP_SERVER = {
   name: 'Local',
   type: SocketType.HTTP,
   host: '192.168.0.123',
-  port: 8118,
+  port: 8080,
+  username: 'test',
+  password: 'test123',
 };
 
 export default function App() {
@@ -53,6 +55,7 @@ export default function App() {
       );
     }
     Vpn2sock.getTunnelStatus().then((status) => {
+      console.log('getTunnelStatus  ', status);
       setStatus(status);
     });
     const listener = DeviceEventEmitter.addListener(

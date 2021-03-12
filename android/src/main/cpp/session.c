@@ -1,5 +1,4 @@
 #include "tun2http.h"
-#include "log.h"
 
 extern JavaVM *jvm;
 extern int pipefds[2];
@@ -29,7 +28,7 @@ void clear() {
 
 void *handle_events(void *a) {
     struct arguments *args = (struct arguments *) a;
-    LOGW("Start events tun=%d thread %x", args->tun, thread_id);
+    LOGW("Start events tun=%d thread %lx", args->tun, thread_id);
 
     // Attach to Java
     JNIEnv *env;
@@ -46,7 +45,7 @@ void *handle_events(void *a) {
     if (getrlimit(RLIMIT_NOFILE, &rlim))
         LOGW("getrlimit error %d: %s", errno, strerror(errno));
     else
-        LOGW("getrlimit soft %d hard %d max sessions %d",
+        LOGW("getrlimit soft %ld hard %ld max sessions %d",
                     rlim.rlim_cur, rlim.rlim_max, maxsessions);
     maxsessions = (int) (rlim.rlim_cur * SESSION_LIMIT / 100);
     if (maxsessions > 1000)
@@ -87,7 +86,7 @@ void *handle_events(void *a) {
     // Loop
     long long last_check = 0;
     while (!stopping) {
-        LOGD("Loop thread %x", thread_id);
+        LOGD("Loop thread %lx", thread_id);
 
         int recheck = 0;
         int timeout = EPOLL_TIMEOUT;
@@ -181,10 +180,10 @@ void *handle_events(void *a) {
 
         if (ready < 0) {
             if (errno == EINTR) {
-                LOGD(        "epoll interrupted tun %d thread %x", args->tun, thread_id);
+                LOGD(        "epoll interrupted tun %d thread %lx", args->tun, thread_id);
                 continue;
             } else {
-                LOGE("epoll tun %d thread %x error %d: %s",
+                LOGE("epoll tun %d thread %lx error %d: %s",
                             args->tun, thread_id, errno, strerror(errno));
                 break;
             }
@@ -273,7 +272,7 @@ void *handle_events(void *a) {
     // Cleanup
     free(args);
 
-    LOGW("Stopped events tun=%d thread %x", args->tun, thread_id);
+    LOGW("Stopped events tun=%d thread %lx", args->tun, thread_id);
     thread_id = 0;
     return NULL;
 }

@@ -1,5 +1,4 @@
 #include "tun2http.h"
-#include "log.h"
 
 extern struct ng_session *ng_session;
 extern FILE *pcap_file;
@@ -515,7 +514,7 @@ ssize_t write_udp(const struct arguments *args, const struct udp_session *cur,
     free(buffer);
 
     if (res != len) {
-        LOGE("write %d/%d", res, len);
+        LOGE("write %zd/%zu", res, len);
         return -1;
     }
 

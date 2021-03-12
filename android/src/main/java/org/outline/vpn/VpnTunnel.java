@@ -28,6 +28,8 @@ import java.util.logging.Logger;
 import java.util.Random;
 import org.outline.tun2socks.Tun2SocksJni;
 import com.htmake.tun2http.Tun2HttpJni;
+import android.util.Base64;
+import java.io.UnsupportedEncodingException;
 
 /**
  * Manages the life-cycle of the system VPN, and of the tunnel that processes its traffic.
@@ -57,7 +59,8 @@ public class VpnTunnel {
   private int tunnelType = 0;
   public static final int TUNNEL_TYPE_SOCKS = 0;
   public static final int TUNNEL_TYPE_HTTP = 1;
-
+  private List<String> tunnelRoutes = null;
+  private boolean mergeDefaultRoute = true;
 
   /**
    * Constructor.
@@ -74,6 +77,14 @@ public class VpnTunnel {
 
   public synchronized void setTunnelType(int type) {
     tunnelType = type;
+  }
+
+  public synchronized void setTunnelRoutes(List<String> routes) {
+    tunnelRoutes = routes;
+  }
+
+  public synchronized void setMergeDefaultRoute(boolean merge) {
+    mergeDefaultRoute = merge;
   }
 
   public synchronized boolean establishVpn() {
@@ -179,7 +190,7 @@ public class VpnTunnel {
    *     connected.
    */
   public synchronized void connectTunnel(
-      final String proxyIp, int proxyPort, boolean remoteUdpForwardingEnabled) {
+      final String proxyIp, int proxyPort, boolean remoteUdpForwardingEnabled, String username, String password) {
     LOG.info("Connecting the tunnel.");
     if (proxyIp == null) {
       throw new IllegalArgumentException("Must provide an IP address to a HTTPProxy server.");
@@ -193,7 +204,17 @@ public class VpnTunnel {
 
     LOG.fine("Starting tun2http thread");
 
-    Tun2HttpJni.start(tunFd.getFd(), remoteUdpForwardingEnabled, 3, proxyIp, proxyPort, vpnService);
+    String proxyAuth = "";
+    if (username != null && password != null) {
+      // try {
+        proxyAuth = String.format(Locale.ROOT, "%s:%s", username, password);
+        // proxyAuth = Base64.encodeToString(proxyAuth.getBytes("UTF-8"), Base64.DEFAULT);
+      // } catch (UnsupportedEncodingException e) {
+      //   e.printStackTrace();
+      // }
+    }
+
+    Tun2HttpJni.start(tunFd.getFd(), remoteUdpForwardingEnabled, 3, proxyIp, proxyPort, vpnService, proxyAuth, vpnService.isApkInDebug() ? -1 : 0);
   }
 
   /**
@@ -261,6 +282,36 @@ public class VpnTunnel {
   /* Returns a random IP address from |DNS_RESOLVER_IP_ADDRESSES|. */
   private String selectDnsResolverAddress() {
     return DNS_RESOLVER_IP_ADDRESSES[new Random().nextInt(DNS_RESOLVER_IP_ADDRESSES.length)];
+  }
+
+  private ArrayList<Subnet> getRouteSubnets() {
+    ArrayList<Subnet> subnets = new ArrayList<>();
+    for (final String route : tunnelRoutes) {
+      try {
+        subnets.add(Subnet.parse(route));
+      } catch (Exception e) {
+        LOG.warning(String.format(Locale.ROOT, "Failed to parse subnet: %s", route));
+      }
+    }
+
+    if (mergeDefaultRoute) {
+      final String[] subnetStrings = vpnService.getResources().getStringArray(
+        vpnService.getResourceId(PRIVATE_LAN_BYPASS_SUBNETS_ID, "array"));
+      for (final String subnetString : subnetStrings) {
+        try {
+          subnets.add(Subnet.parse(subnetString));
+        } catch (Exception e) {
+          LOG.warning(String.format(Locale.ROOT, "Failed to parse subnet: %s", subnetString));
+        }
+      }
+    }
+
+    if (subnets.size() == 0) {
+      // 默认所有流量都走VPN
+      subnets.add(Subnet.parse("0.0.0.0/0"));
+    }
+
+    return subnets;
   }
 
   /* Returns a subnet list that excludes reserved subnets. */
